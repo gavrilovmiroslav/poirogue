@@ -1,30 +1,24 @@
-use bracket_lib::prelude::*;
-use crate::game::map_builder::{SimpleDungeonBuilder};
-use crate::game_state::{PoirogueGameManager};
-use crate::map::{PoirogueMapBuilder};
-
-mod map;
-mod game_state;
-mod entity;
 mod game;
 
-embedded_resource!(TILE_FONT, "../resources/classic_roguelike_white.png");
+use bracket_lib::prelude::BTerm;
+use game::Game;
+use crate::game::GameSystem;
 
-fn main() -> BError {
-    link_resource!(TILE_FONT, "../resources/classic_roguelike_white.png");
+struct ExampleSystem;
 
-    let ctx = BTermBuilder::new()
-        .with_tile_dimensions(16,16)
-        .with_font("classic_roguelike_white.png", 8, 8)
-        .with_simple_console(80, 50, "classic_roguelike_white.png")
-        .with_title("Poirogue")
-        .build()?;
+impl GameSystem for ExampleSystem {
+    fn init(&mut self) {
+        println!("Example system init'd!");
+    }
 
-    let mut manager: PoirogueGameManager =
-        PoirogueGameManager::new(80, 50);
+    fn tick(&mut self, ctx: &mut BTerm) {
+        println!("Example system tick'd!");
+    }
+}
 
-    let mut map_builder = SimpleDungeonBuilder::new();
-    map_builder.generate(&mut manager.map);
-
-    main_loop(ctx, manager)
+fn main() {
+    let mut game = Game::new();
+    let example_system = ExampleSystem{};
+    game.add_system(example_system);
+    game.run();
 }
