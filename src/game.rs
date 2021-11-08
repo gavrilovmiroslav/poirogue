@@ -1,11 +1,7 @@
 use std::borrow::BorrowMut;
 use bracket_lib::prelude::*;
 use bracket_lib::prelude::{BTerm, BTermBuilder, GameState, main_loop};
-
-pub trait GameSystem {
-    fn init(&mut self);
-    fn tick(&mut self, ctx: &mut BTerm);
-}
+use crate::GameSystem;
 
 pub struct Game {
     systems: Vec<Box<dyn GameSystem>>,
@@ -39,7 +35,7 @@ impl Game {
             .with_title("Poirogue")
             .build().unwrap();
 
-        main_loop(ctx, self);
+        main_loop(ctx, self).unwrap();
     }
 }
 
