@@ -18,6 +18,10 @@ pub struct World {
 impl CommandQueue for World {
     type CommandType = GameCommand;
 
+    fn push(&mut self, command: Self::CommandType) {
+        self.commands.push_back(command);
+    }
+
     fn get_next(&mut self) -> Option<Self::CommandType> {
         self.commands.pop_front()
     }

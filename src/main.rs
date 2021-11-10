@@ -1,6 +1,7 @@
 use bracket_lib::prelude::{*};
 use crate::game::{Game};
 
+mod renderable;
 mod command_queue;
 mod world;
 mod game;

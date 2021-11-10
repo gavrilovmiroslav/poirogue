@@ -9,7 +9,7 @@ impl GameState for Game {
     fn tick(&mut self, ctx: &mut BTerm) {
         if let mut world = get_world() {
             for c in world.chars.iter() {
-                ctx.print(1, 1, c.glyph);
+                ctx.print(1, 1, c.renderable.glyph);
             }
         }
     }
