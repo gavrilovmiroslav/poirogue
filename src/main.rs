@@ -1,22 +1,14 @@
+use bracket_lib::prelude::{*};
+use crate::game::{Game};
+
+mod command_queue;
+mod world;
 mod game;
-mod system;
-
-use bracket_lib::prelude::BTerm;
-use game::Game;
-use crate::game::GameSystem;
-use crate::system::GameSystem;
-
-struct ExampleSystem;
-
-impl GameSystem for ExampleSystem {
-    fn get_name(&self) -> &str { "Example system" }
-    fn init(&mut self) {}
-    fn tick(&mut self, _ctx: &mut BTerm) {}
-}
+mod characters;
 
 fn main() {
-    let mut game = Game::new();
-    let example_system = ExampleSystem{};
-    game.add_system(example_system);
-    game.run();
+    embedded_resource!(TILE_FONT, "../resources/classic_roguelike_white.png");
+    link_resource!(TILE_FONT, "../resources/classic_roguelike_white.png");
+
+    Game::run();
 }
