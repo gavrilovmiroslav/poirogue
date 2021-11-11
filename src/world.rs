@@ -7,11 +7,12 @@ use std::sync::mpsc::{channel, Receiver, RecvError, Sender, TryRecvError};
 use std::thread;
 use std::thread::{JoinHandle, Thread};
 use bracket_lib::prelude::BTerm;
+use crate::murder_gen::{generate_murder};
 
 use crate::pawn::Pawn;
 
 pub enum GameCommand {
-    Restart,
+    Gen,
     Exit,
 }
 
@@ -33,14 +34,16 @@ impl World {
             commands: Default::default(),
             receiver: r,
             sender: s,
-            chars: vec![]
+            chars: vec![],
         }
     }
 
     pub fn receive_commands(&mut self) {
         if let Ok(message) = self.receiver.try_recv() {
             match message {
-                GameCommand::Restart => {}
+                GameCommand::Gen => {
+                    let case = generate_murder();
+                },
                 GameCommand::Exit => std::process::exit(0)
             }
         }

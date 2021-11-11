@@ -1,4 +1,4 @@
-use bracket_lib::prelude::{BLACK, BTerm, RGB, WHITE};
+use bracket_lib::prelude::{BLACK, BTerm, GREY, RGB, WHITE};
 use bracket_lib::prelude::VirtualKeyCode;
 use crate::world::{GameCommand, get_world, Tick};
 
@@ -77,7 +77,7 @@ pub fn virtual_key_to_char(v: VirtualKeyCode) -> Option<char> {
 
 pub fn interpret_game_command(s: &str) -> Option<GameCommand> {
     match s {
-        "RESTART" => Some(GameCommand::Restart),
+        "GEN" => Some(GameCommand::Gen),
         "EXIT" => Some(GameCommand::Exit),
         _ => None,
     }
@@ -86,9 +86,10 @@ pub fn interpret_game_command(s: &str) -> Option<GameCommand> {
 impl Tick for Console {
     fn tick(&mut self, ctx: &mut BTerm) {
         if self.is_visible {
-            ctx.draw_box(0, 0, 79, 15, RGB::named(WHITE), RGB::named(WHITE));
-            ctx.draw_box(0, 0, 79, 3, RGB::named(WHITE), RGB::named(WHITE));
-            ctx.print(3, 1, &self.buffer);
+            ctx.draw_box(0, 0, 79, 15, RGB::named(GREY), RGB::named(GREY));
+            ctx.draw_box(0, 0, 79, 3, RGB::named(GREY), RGB::named(GREY));
+            ctx.print(3, 1, "> ");
+            ctx.print(5, 1, &self.buffer);
 
             let mut i  = 0;
             for message in self.history.iter().rev().take(10) {
@@ -106,11 +107,11 @@ impl Tick for Console {
                 self.buffer.pop();
             },
 
-            Some(VirtualKeyCode::Return) if self.buffer.len() > 0 => {
+            Some(VirtualKeyCode::Return) if self.is_visible && self.buffer.len() > 0 => {
                 let comm = String::from(self.buffer.as_str());
                 if let Some(command) = interpret_game_command(comm.as_str()) {
-                    if let mut world = get_world() {
-                        world.sender.send(command);
+                    if let world = get_world() {
+                        world.sender.send(command).unwrap();
                     }
                     self.history.push(format!("{:<20}        -- OK!", comm));
                 } else {

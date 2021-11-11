@@ -8,6 +8,7 @@ mod world;
 mod game;
 mod pawn;
 mod console;
+mod murder_gen;
 
 fn main() {
     embedded_resource!(TILE_FONT, "../resources/classic_roguelike_white.png");

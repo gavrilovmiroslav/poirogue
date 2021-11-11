@@ -29,7 +29,9 @@ impl GameState for Game {
 impl Game {
     pub fn run() {
         let game = Game { console: Console::new() };
-        let term = BTermBuilder::new()
+
+        let term =
+            BTermBuilder::new()
             .with_tile_dimensions(16,16)
             .with_font("classic_roguelike_white.png", 8, 8)
             .with_simple_console(80, 50, "classic_roguelike_white.png")
