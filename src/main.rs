@@ -1,11 +1,13 @@
 use bracket_lib::prelude::{*};
 use crate::game::{Game};
 
-mod renderable;
+mod geometry;
+mod drawable;
 mod command_queue;
 mod world;
 mod game;
-mod characters;
+mod pawn;
+mod console;
 
 fn main() {
     embedded_resource!(TILE_FONT, "../resources/classic_roguelike_white.png");

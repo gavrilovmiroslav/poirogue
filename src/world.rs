@@ -1,35 +1,49 @@
 use std::collections::VecDeque;
 use std::sync::{MutexGuard, Mutex};
 use lazy_static::lazy_static;
+use crate::command_queue::Queueable;
+use std::sync::mpsc;
+use std::sync::mpsc::{channel, Receiver, RecvError, Sender, TryRecvError};
+use std::thread;
+use std::thread::{JoinHandle, Thread};
+use bracket_lib::prelude::BTerm;
 
-use crate::characters::Character;
-use crate::command_queue::CommandQueue;
+use crate::pawn::Pawn;
 
 pub enum GameCommand {
-    Load,
+    Restart,
     Exit,
 }
 
-pub struct World {
-    pub commands: VecDeque<GameCommand>,
-    pub chars: Vec<Character>,
+pub trait Tick {
+    fn tick(&mut self, ctx: &mut BTerm);
 }
 
-impl CommandQueue for World {
-    type CommandType = GameCommand;
-
-    fn push(&mut self, command: Self::CommandType) {
-        self.commands.push_back(command);
-    }
-
-    fn get_next(&mut self) -> Option<Self::CommandType> {
-        self.commands.pop_front()
-    }
+pub struct World {
+    pub commands: Queueable<GameCommand>,
+    pub receiver: Receiver<GameCommand>,
+    pub sender: Sender<GameCommand>,
+    pub chars: Vec<Pawn>,
 }
 
 impl World {
     pub fn new() -> World {
-        World { commands: Default::default(), chars: vec![] }
+        let (s, r) = channel::<GameCommand>();
+        World {
+            commands: Default::default(),
+            receiver: r,
+            sender: s,
+            chars: vec![]
+        }
+    }
+
+    pub fn receive_commands(&mut self) {
+        if let Ok(message) = self.receiver.try_recv() {
+            match message {
+                GameCommand::Restart => {}
+                GameCommand::Exit => std::process::exit(0)
+            }
+        }
     }
 }
 

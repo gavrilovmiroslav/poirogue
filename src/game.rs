@@ -1,23 +1,34 @@
 use bracket_lib::prelude::{BTerm, BTermBuilder, GameState, main_loop};
 use std::sync::{Mutex, MutexGuard};
-use crate::world::{get_world, World};
+use crate::world::{get_world, Tick, World};
 use lazy_static::lazy_static;
+use crate::console::Console;
 
-pub struct Game;
+pub struct Game {
+    console: Console,
+}
 
 impl GameState for Game {
     fn tick(&mut self, ctx: &mut BTerm) {
-        if let mut world = get_world() {
+        ctx.cls();
+
+        if let mut world= get_world() {
+            world.receive_commands();
+        }
+
+        if let world = get_world() {
             for c in world.chars.iter() {
-                ctx.print(1, 1, c.renderable.glyph);
+                ctx.print(1, 1, c.drawable.glyph);
             }
         }
+
+        self.console.tick(ctx);
     }
 }
 
 impl Game {
     pub fn run() {
-        let game = Game {};
+        let game = Game { console: Console::new() };
         let term = BTermBuilder::new()
             .with_tile_dimensions(16,16)
             .with_font("classic_roguelike_white.png", 8, 8)

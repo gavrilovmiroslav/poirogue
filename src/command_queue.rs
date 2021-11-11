@@ -1,16 +1,23 @@
 use std::collections::VecDeque;
-
-pub trait CommandQueue {
-    type CommandType: Sync + Send;
-
-    fn push(&mut self, command: Self::CommandType);
-    fn get_next(&mut self) -> Option<Self::CommandType>;
-}
-
-pub trait CommandInterpreter : CommandQueue {
-    fn interpret(&mut self, command: Self::CommandType);
-}
+use std::sync::mpsc::{channel, Sender, Receiver};
+use crate::world::GameCommand;
 
 pub struct Queueable<Commands> {
-    pub commands: VecDeque<Commands>,
+    commands: VecDeque<Commands>,
+}
+
+impl<T> Default for Queueable<T> {
+    fn default() -> Self {
+        Queueable { commands: Default::default() }
+    }
+}
+
+impl<CommandType> Queueable<CommandType> {
+    pub fn push(&mut self, comm: CommandType) {
+        self.commands.push_back(comm);
+    }
+
+    pub fn get_next(&mut self) -> Option<CommandType> {
+        self.commands.pop_front()
+    }
 }

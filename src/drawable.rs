@@ -1,6 +1,6 @@
 use crate::{Point, RGB};
 
-pub struct Renderable {
+pub struct Drawable {
     pub glyph: char,
     pub position: Point,
     pub color: RGB,
