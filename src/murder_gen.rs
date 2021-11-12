@@ -33,15 +33,23 @@ pub enum Relation {
     Dislikes,
 }
 
+fn colorize(mut dot_code: String) -> String {
+    dot_code = dot_code.replace("Killed\"", "Killed\", color = \"red\"");
+    dot_code = dot_code.replace("Absolves\"", "Absolves\", color = \"green\"");
+    dot_code = dot_code.replace("Protects\"", "Protects\", color = \"blue\"");
+    dot_code = dot_code.replace("Dislikes\"", "Dislikes\", color = \"orange\"");
+    dot_code
+}
+
 type MurderCase = Graph<Person, Relation>;
 
 pub fn generate_murder() -> MurderCase {
     let mut rng = thread_rng();
-    let mut case: MurderCase = Default::default();
+    let mut case_graph: MurderCase = Default::default();
 
-    let victim_index = case.add_node(Person::Victim);
+    let victim_index = case_graph.add_node(Person::Victim);
     let mut suspect_indices = (0..7)
-        .map(|i| case.add_node(Person::Suspect(i)))
+        .map(|i| case_graph.add_node(Person::Suspect(i)))
         .collect::<Vec<NodeIndex>>();
 
     let killer = rng.gen_range(0..7);
@@ -50,7 +58,7 @@ pub fn generate_murder() -> MurderCase {
     let mut suspects_sans_killer = suspect_indices.clone();
     suspects_sans_killer.remove(killer);
 
-    case.add_edge(killer_index,victim_index,Relation::Killed);
+    case_graph.add_edge(killer_index, victim_index, Relation::Killed);
 
     let mut alibi_indices = suspect_indices.clone();
 
@@ -68,20 +76,22 @@ pub fn generate_murder() -> MurderCase {
         });
     }
 
-    connect(&mut case, &suspect_indices, &alibi_indices, |a, b| { *b != killer_index }, Relation::Absolves);
-    connect(&mut case, &suspect_indices, &suspect_indices, |a, b| a != b && rng.gen_range(0..10) > 3, Relation::Protects);
+    connect(&mut case_graph, &suspect_indices, &alibi_indices, |a, b| { *b != killer_index }, Relation::Absolves);
+    connect(&mut case_graph, &suspect_indices, &suspect_indices, |a, b| a != b && rng.gen_range(0..10) > 3, Relation::Protects);
 
     suspect_indices.push(victim_index);
-    connect(&mut case, &alibi_indices, &suspect_indices, |a, b| a != b && rng.gen_range(0..10) > 4, Relation::Dislikes);
+    connect(&mut case_graph, &alibi_indices, &suspect_indices, |a, b| a != b && rng.gen_range(0..10) > 4, Relation::Dislikes);
 
     suspects_sans_killer.shuffle(&mut rng);
     for i in suspects_sans_killer.iter().take(rng.gen_range(3..5)) {
-        case.add_edge(killer_index, *i, Relation::Dislikes);
+        case_graph.add_edge(killer_index, *i, Relation::Dislikes);
     }
 
-    let dot = Dot::new(&case);
-    let encoded_dot = format!("{}", encode(&*format!("{:?}", dot)));
+    let dot = Dot::new(&case_graph);
+    let mut dot_code = String::from(&*format!("{:?}", dot));
+    let encoded_dot = format!("https://dreampuf.github.io/GraphvizOnline/#{}",
+                              encode(colorize(dot_code).as_str()));
 
-    open::that(format!("https://dreampuf.github.io/GraphvizOnline/#{}", encoded_dot)).unwrap();
-    case
+    open::that(encoded_dot).unwrap();
+    case_graph
 }
