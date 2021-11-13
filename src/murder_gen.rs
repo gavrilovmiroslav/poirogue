@@ -4,6 +4,7 @@ use petgraph::Graph;
 use petgraph::dot::{Dot, Config};
 use petgraph::graph::NodeIndex;
 use rand::{Rng, thread_rng};
+use rand::rngs::ThreadRng;
 use rand::seq::SliceRandom;
 use urlencoding::encode;
 
@@ -26,18 +27,70 @@ impl Debug for Person {
 }
 
 #[derive(Debug, Copy, Clone)]
+pub enum PosOpinion {
+    Loves,
+    Likes,
+    Adores,
+    Respects,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum NegOpinion {
+    Hates,
+    Dislikes,
+    BoredWith,
+    Disdains
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum Opinion {
+    Good(PosOpinion),
+    Neutral,
+    Bad(NegOpinion)
+}
+
+#[derive(Debug, Copy, Clone)]
 pub enum Relation {
     Killed,
     Absolves,
     Protects,
-    Dislikes,
+    Envies,
+    Past(Opinion)
+}
+
+fn random_gossip(rng: &mut ThreadRng) -> Relation {
+    match rng.gen_range(1..10) {
+        1 => Relation::Past(Opinion::Good(PosOpinion::Loves)),
+        2 => Relation::Past(Opinion::Good(PosOpinion::Likes)),
+        3 => Relation::Past(Opinion::Good(PosOpinion::Adores)),
+        4 => Relation::Past(Opinion::Good(PosOpinion::Respects)),
+        5 => Relation::Past(Opinion::Good(PosOpinion::Respects)),
+        6 => Relation::Past(Opinion::Bad(NegOpinion::Hates)),
+        7 => Relation::Past(Opinion::Bad(NegOpinion::Dislikes)),
+        8 => Relation::Past(Opinion::Bad(NegOpinion::BoredWith)),
+        9 => Relation::Past(Opinion::Bad(NegOpinion::Disdains)),
+        10 => Relation::Past(Opinion::Bad(NegOpinion::Disdains)),
+        _ => Relation::Past(Opinion::Neutral)
+    }
+}
+
+fn nice_opinion_names(mut dot_code: String) -> String {
+    dot_code = dot_code.replace("Past(Good(Loves))\"", "Loved\", color = \"pink;0.75:grey\", arrowhead=\"dot\", fontsize=12, style=\"dashed\"");
+    dot_code = dot_code.replace("Past(Good(Adores))\"", "Adored\", color = \"pink;0.75:grey\", arrowhead=\"dot\", fontsize=12, style=\"dashed\"");
+    dot_code = dot_code.replace("Past(Good(Likes))\"", "Liked\", color = \"pink;0.75:grey\", arrowhead=\"dot\", fontsize=12, style=\"dashed\"");
+    dot_code = dot_code.replace("Past(Good(Respects))\"", "Respected\", color = \"pink;0.75:grey\", arrowhead=\"dot\", fontsize=12, style=\"dashed\"");
+    dot_code = dot_code.replace("Past(Bad(Hates))\"", "Hated\", color = \"orange;0.35:grey\", arrowhead=\"box\", fontsize=12, style=\"dashed\"");
+    dot_code = dot_code.replace("Past(Bad(BoredWith))\"", "Bored With\", color = \"orange;0.35:grey\", arrowhead=\"box\", fontsize=12, style=\"dashed\"");
+    dot_code = dot_code.replace("Past(Bad(Disdains))\"", "Disdained\", color = \"orange;0.35:grey\", arrowhead=\"box\", fontsize=12, style=\"dashed\"");
+    dot_code = dot_code.replace("Past(Bad(Dislikes))\"", "Disliked\", color = \"orange;0.35:grey\", arrowhead=\"box\", fontsize=12, style=\"dashed\"");
+    dot_code
 }
 
 fn colorize(mut dot_code: String) -> String {
-    dot_code = dot_code.replace("Killed\"", "Killed\", color = \"red\"");
-    dot_code = dot_code.replace("Absolves\"", "Absolves\", color = \"green\"");
-    dot_code = dot_code.replace("Protects\"", "Protects\", color = \"blue\"");
-    dot_code = dot_code.replace("Dislikes\"", "Dislikes\", color = \"orange\"");
+    dot_code = dot_code.replace("Killed\"", "Killed\", color = \"crimson\", penwidth = 2");
+    dot_code = dot_code.replace("Absolves\"", "Absolves\", color = \"cornflowerblue\", penwidth = 2");
+    dot_code = dot_code.replace("Protects\"", "Protects\", color = \"blueviolet\"");
+    dot_code = dot_code.replace("Envies\"", "Envies\", color = \"chartreuse3\"");
     dot_code
 }
 
@@ -79,18 +132,30 @@ pub fn generate_murder() -> MurderCase {
     connect(&mut case_graph, &suspect_indices, &alibi_indices, |a, b| { *b != killer_index }, Relation::Absolves);
     connect(&mut case_graph, &suspect_indices, &suspect_indices, |a, b| a != b && rng.gen_range(0..10) > 3, Relation::Protects);
 
+    for _i in 1..5 {
+        let gossip = random_gossip(&mut rng);
+        connect(&mut case_graph, &suspect_indices, &suspect_indices, |a, b| a != b && rng.gen_range(0..10) > 7, gossip);
+    }
+
     suspect_indices.push(victim_index);
-    connect(&mut case_graph, &alibi_indices, &suspect_indices, |a, b| a != b && rng.gen_range(0..10) > 4, Relation::Dislikes);
+    connect(&mut case_graph, &alibi_indices, &suspect_indices, |a, b| a != b && rng.gen_range(0..10) > 6, Relation::Envies);
+    connect(&mut case_graph, &alibi_indices, &suspect_indices, |a, b| a != b && rng.gen_range(0..10) > 6, Relation::Envies);
 
     suspects_sans_killer.shuffle(&mut rng);
-    for i in suspects_sans_killer.iter().take(rng.gen_range(3..5)) {
-        case_graph.add_edge(killer_index, *i, Relation::Dislikes);
+    for i in suspects_sans_killer.iter().take(rng.gen_range(1..3)) {
+        case_graph.add_edge(killer_index, *i, Relation::Envies);
+    }
+
+    suspect_indices.shuffle(&mut rng);
+    for i in suspect_indices.iter().take(rng.gen_range(5..10)) {
+        if *i == victim_index { continue }
+        case_graph.add_edge(*i, victim_index, random_gossip(&mut rng));
     }
 
     let dot = Dot::new(&case_graph);
     let mut dot_code = String::from(&*format!("{:?}", dot));
     let encoded_dot = format!("https://dreampuf.github.io/GraphvizOnline/#{}",
-                              encode(colorize(dot_code).as_str()));
+                              encode(nice_opinion_names(colorize(dot_code)).as_str()));
 
     open::that(encoded_dot).unwrap();
     case_graph
