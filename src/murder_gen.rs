@@ -1,5 +1,7 @@
+use std::collections::hash_map::RandomState;
 use std::collections::HashSet;
 use std::fmt::{Debug, Display, Formatter};
+use std::ops::Deref;
 use petgraph::Graph;
 use petgraph::dot::{Dot, Config};
 use petgraph::graph::NodeIndex;
@@ -7,9 +9,11 @@ use rand::{Rng, thread_rng};
 use rand::rngs::ThreadRng;
 use rand::seq::SliceRandom;
 use urlencoding::encode;
+use crate::VirtualKeyCode::P;
 
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum Person {
-    Player,
+    Killer,
     Victim,
     Suspect(u8),
 }
@@ -26,7 +30,7 @@ impl Debug for Person {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum PosOpinion {
     Loves,
     Likes,
@@ -34,55 +38,92 @@ pub enum PosOpinion {
     Respects,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum NegOpinion {
     Hates,
     Dislikes,
-    BoredWith,
-    Disdains
+    Disdains,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum Opinion {
     Good(PosOpinion),
     Neutral,
     Bad(NegOpinion)
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub enum Emotion {
+    Pity,
+    Envy,
+    Anger,
+    Revulsion,
+    Fear,
+    Lust,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum Relation {
     Killed,
     Absolves,
     Protects,
-    Envies,
-    Past(Opinion)
+    Beholden,
+    Feels(Emotion),
+    Gossip(Opinion)
+}
+
+fn random_emotion(rng: &mut ThreadRng) -> Emotion {
+    match rng.gen_range(1..6) {
+        1 => Emotion::Anger,
+        2 => Emotion::Envy,
+        3 => Emotion::Fear,
+        4 => Emotion::Revulsion,
+        5 => Emotion::Pity,
+        _ => Emotion::Lust
+    }
 }
 
 fn random_gossip(rng: &mut ThreadRng) -> Relation {
     match rng.gen_range(1..10) {
-        1 => Relation::Past(Opinion::Good(PosOpinion::Loves)),
-        2 => Relation::Past(Opinion::Good(PosOpinion::Likes)),
-        3 => Relation::Past(Opinion::Good(PosOpinion::Adores)),
-        4 => Relation::Past(Opinion::Good(PosOpinion::Respects)),
-        5 => Relation::Past(Opinion::Good(PosOpinion::Respects)),
-        6 => Relation::Past(Opinion::Bad(NegOpinion::Hates)),
-        7 => Relation::Past(Opinion::Bad(NegOpinion::Dislikes)),
-        8 => Relation::Past(Opinion::Bad(NegOpinion::BoredWith)),
-        9 => Relation::Past(Opinion::Bad(NegOpinion::Disdains)),
-        10 => Relation::Past(Opinion::Bad(NegOpinion::Disdains)),
-        _ => Relation::Past(Opinion::Neutral)
+        1 => Relation::Gossip(Opinion::Good(PosOpinion::Loves)),
+        2 => Relation::Gossip(Opinion::Good(PosOpinion::Likes)),
+        3 => Relation::Gossip(Opinion::Good(PosOpinion::Adores)),
+        4..=5 => Relation::Gossip(Opinion::Good(PosOpinion::Respects)),
+        6 => Relation::Gossip(Opinion::Bad(NegOpinion::Hates)),
+        7..=8 => Relation::Gossip(Opinion::Bad(NegOpinion::Dislikes)),
+        9 => Relation::Gossip(Opinion::Bad(NegOpinion::Disdains)),
+        _ => Relation::Gossip(Opinion::Neutral)
+    }
+}
+
+fn random_strong_gossip(rng: &mut ThreadRng) -> Relation {
+    match rng.gen_bool(0.5) {
+        true => Relation::Gossip(Opinion::Good(PosOpinion::Loves)),
+        false => Relation::Gossip(Opinion::Bad(NegOpinion::Hates)),
+    }
+}
+
+fn random_mostly_negative_gossip(rng: &mut ThreadRng) -> Relation {
+    match rng.gen_range(1..20) {
+        1 => Relation::Gossip(Opinion::Good(PosOpinion::Likes)),
+        2 => Relation::Gossip(Opinion::Good(PosOpinion::Loves)),
+        3 => Relation::Gossip(Opinion::Good(PosOpinion::Adores)),
+        4 => Relation::Gossip(Opinion::Good(PosOpinion::Respects)),
+        5..=12 => Relation::Gossip(Opinion::Bad(NegOpinion::Dislikes)),
+        13..=17 => Relation::Gossip(Opinion::Bad(NegOpinion::Disdains)),
+        18..=20 => Relation::Gossip(Opinion::Bad(NegOpinion::Hates)),
+        _ => Relation::Gossip(Opinion::Neutral)
     }
 }
 
 fn nice_opinion_names(mut dot_code: String) -> String {
-    dot_code = dot_code.replace("Past(Good(Loves))\"", "Loved\", color = \"pink;0.75:grey\", arrowhead=\"dot\", fontsize=12, style=\"dashed\"");
-    dot_code = dot_code.replace("Past(Good(Adores))\"", "Adored\", color = \"pink;0.75:grey\", arrowhead=\"dot\", fontsize=12, style=\"dashed\"");
-    dot_code = dot_code.replace("Past(Good(Likes))\"", "Liked\", color = \"pink;0.75:grey\", arrowhead=\"dot\", fontsize=12, style=\"dashed\"");
-    dot_code = dot_code.replace("Past(Good(Respects))\"", "Respected\", color = \"pink;0.75:grey\", arrowhead=\"dot\", fontsize=12, style=\"dashed\"");
-    dot_code = dot_code.replace("Past(Bad(Hates))\"", "Hated\", color = \"orange;0.35:grey\", arrowhead=\"box\", fontsize=12, style=\"dashed\"");
-    dot_code = dot_code.replace("Past(Bad(BoredWith))\"", "Bored With\", color = \"orange;0.35:grey\", arrowhead=\"box\", fontsize=12, style=\"dashed\"");
-    dot_code = dot_code.replace("Past(Bad(Disdains))\"", "Disdained\", color = \"orange;0.35:grey\", arrowhead=\"box\", fontsize=12, style=\"dashed\"");
-    dot_code = dot_code.replace("Past(Bad(Dislikes))\"", "Disliked\", color = \"orange;0.35:grey\", arrowhead=\"box\", fontsize=12, style=\"dashed\"");
+    dot_code = dot_code.replace("Gossip(Good(Loves))\"", "Loves\", color = \"deeppink3\", arrowhead=\"dot\", fontsize=12, style=\"dashed\"");
+    dot_code = dot_code.replace("Gossip(Good(Adores))\"", "Adores\", color = \"deeppink3\", arrowhead=\"dot\", fontsize=12, style=\"dashed\"");
+    dot_code = dot_code.replace("Gossip(Good(Likes))\"", "Likes\", color = \"deeppink3\", arrowhead=\"dot\", fontsize=12, style=\"dashed\"");
+    dot_code = dot_code.replace("Gossip(Good(Respects))\"", "Respects\", color = \"deeppink3\", arrowhead=\"dot\", fontsize=12, style=\"dashed\"");
+    dot_code = dot_code.replace("Gossip(Bad(Hates))\"", "Hates\", color = \"orange\", arrowhead=\"box\", fontsize=12, style=\"dashed\"");
+    dot_code = dot_code.replace("Gossip(Bad(Disdains))\"", "Disdains\", color = \"orange\", arrowhead=\"box\", fontsize=12, style=\"dashed\"");
+    dot_code = dot_code.replace("Gossip(Bad(Dislikes))\"", "Dislikes\", color = \"orange\", arrowhead=\"box\", fontsize=12, style=\"dashed\"");
     dot_code
 }
 
@@ -90,27 +131,31 @@ fn colorize(mut dot_code: String) -> String {
     dot_code = dot_code.replace("Killed\"", "Killed\", color = \"crimson\", penwidth = 2");
     dot_code = dot_code.replace("Absolves\"", "Absolves\", color = \"cornflowerblue\", penwidth = 2");
     dot_code = dot_code.replace("Protects\"", "Protects\", color = \"blueviolet\"");
-    dot_code = dot_code.replace("Envies\"", "Envies\", color = \"chartreuse3\"");
+    dot_code = dot_code.replace("Feels(Envy)\"", "Envies\", color = \"chartreuse3\"");
+    dot_code = dot_code.replace("Feels(Pity)\"", "Pities\", color = \"goldenrod4\"");
+    dot_code = dot_code.replace("Feels(Anger)\"", "Angry with\", color = \"coral1\"");
+    dot_code = dot_code.replace("Feels(Revulsion)\"", "Revulsed by\", color = \"cadetblue4\"");
+    dot_code = dot_code.replace("Feels(Fear)\"", "Fears\", color = \"darkgoldenrod3\"");
     dot_code
 }
 
 type MurderCase = Graph<Person, Relation>;
+type MurderRelations = HashSet<Relation, RandomState>;
 
 pub fn generate_murder() -> MurderCase {
     let mut rng = thread_rng();
     let mut case_graph: MurderCase = Default::default();
 
     let victim_index = case_graph.add_node(Person::Victim);
+    let killer_index = case_graph.add_node(Person::Killer);
+
     let mut suspect_indices = (0..7)
         .map(|i| case_graph.add_node(Person::Suspect(i)))
         .collect::<Vec<NodeIndex>>();
 
-    let killer = rng.gen_range(0..7);
-    let killer_index = suspect_indices[killer];
-
     let mut suspects_sans_killer = suspect_indices.clone();
-    suspects_sans_killer.remove(killer);
 
+    suspect_indices.push(killer_index);
     case_graph.add_edge(killer_index, victim_index, Relation::Killed);
 
     let mut alibi_indices = suspect_indices.clone();
@@ -133,24 +178,32 @@ pub fn generate_murder() -> MurderCase {
     connect(&mut case_graph, &suspect_indices, &suspect_indices, |a, b| a != b && rng.gen_range(0..10) > 3, Relation::Protects);
 
     for _i in 1..5 {
-        let gossip = random_gossip(&mut rng);
-        connect(&mut case_graph, &suspect_indices, &suspect_indices, |a, b| a != b && rng.gen_range(0..10) > 7, gossip);
+        connect(&mut case_graph, &suspect_indices, &suspect_indices, |a, b| a != b && rng.gen_range(0..10) > 7, random_gossip(&mut thread_rng()));
     }
 
     suspect_indices.push(victim_index);
-    connect(&mut case_graph, &alibi_indices, &suspect_indices, |a, b| a != b && rng.gen_range(0..10) > 6, Relation::Envies);
-    connect(&mut case_graph, &alibi_indices, &suspect_indices, |a, b| a != b && rng.gen_range(0..10) > 6, Relation::Envies);
+    connect(&mut case_graph, &alibi_indices, &suspect_indices, |a, b| a != b && rng.gen_range(0..10) > 6, Relation::Feels(random_emotion(&mut thread_rng())));
 
     suspects_sans_killer.shuffle(&mut rng);
     for i in suspects_sans_killer.iter().take(rng.gen_range(1..3)) {
-        case_graph.add_edge(killer_index, *i, Relation::Envies);
+        case_graph.add_edge(killer_index, *i, Relation::Feels(random_emotion(&mut rng)));
     }
 
     suspect_indices.shuffle(&mut rng);
-    for i in suspect_indices.iter().take(rng.gen_range(5..10)) {
+    for i in suspect_indices.iter().take(rng.gen_range(5..7)) {
         if *i == victim_index { continue }
-        case_graph.add_edge(*i, victim_index, random_gossip(&mut rng));
+        case_graph.add_edge(*i, victim_index, random_mostly_negative_gossip(&mut rng));
     }
+
+    suspect_indices.shuffle(&mut rng);
+    for i in suspect_indices.iter().take(rng.gen_range(2..4)) {
+        if *i == victim_index { continue }
+        case_graph.add_edge(victim_index, *i, random_strong_gossip(&mut rng));
+    }
+
+    let murder_edges = case_graph.edges_connecting(killer_index, victim_index);
+    let murder_edge_weights: MurderRelations = HashSet::from_iter(murder_edges.map(|edge| *edge.weight() ).collect::<Vec<Relation>>());
+    // edges...?
 
     let dot = Dot::new(&case_graph);
     let mut dot_code = String::from(&*format!("{:?}", dot));
