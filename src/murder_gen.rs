@@ -1,10 +1,11 @@
 use std::collections::hash_map::RandomState;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::Deref;
 use petgraph::Graph;
 use petgraph::dot::{Dot, Config};
 use petgraph::graph::NodeIndex;
+use petgraph::prelude::EdgeRef;
 use rand::{Rng, thread_rng};
 use rand::rngs::ThreadRng;
 use rand::seq::SliceRandom;
@@ -25,6 +26,12 @@ impl Person {
 }
 
 impl Debug for Person {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.get_name())
+    }
+}
+
+impl Display for Person {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.get_name())
     }
@@ -70,6 +77,12 @@ pub enum Relation {
     Beholden,
     Feels(Emotion),
     Gossip(Opinion)
+}
+
+impl Display for Relation {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(self, f)
+    }
 }
 
 fn random_emotion(rng: &mut ThreadRng) -> Emotion {
@@ -130,6 +143,7 @@ fn nice_opinion_names(mut dot_code: String) -> String {
 fn colorize(mut dot_code: String) -> String {
     dot_code = dot_code.replace("Killed\"", "Killed\", color = \"crimson\", penwidth = 2");
     dot_code = dot_code.replace("Absolves\"", "Absolves\", color = \"cornflowerblue\", penwidth = 2");
+    dot_code = dot_code.replace("Beholden\"", "Beholden\", color = \"green\"");
     dot_code = dot_code.replace("Protects\"", "Protects\", color = \"blueviolet\"");
     dot_code = dot_code.replace("Feels(Envy)\"", "Envies\", color = \"chartreuse3\"");
     dot_code = dot_code.replace("Feels(Pity)\"", "Pities\", color = \"goldenrod4\"");
@@ -140,9 +154,9 @@ fn colorize(mut dot_code: String) -> String {
 }
 
 type MurderCase = Graph<Person, Relation>;
-type MurderRelations = HashSet<Relation, RandomState>;
+type MurderRelations = HashMap<Person, (Person, Relation)>;
 
-pub fn generate_murder() -> MurderCase {
+pub fn generate_murder() -> (MurderCase, MurderRelations) {
     let mut rng = thread_rng();
     let mut case_graph: MurderCase = Default::default();
 
@@ -175,6 +189,7 @@ pub fn generate_murder() -> MurderCase {
     }
 
     connect(&mut case_graph, &suspect_indices, &alibi_indices, |a, b| { *b != killer_index }, Relation::Absolves);
+    connect(&mut case_graph, &suspect_indices, &alibi_indices, |a, b| a != b && rng.gen_range(0..10) > 6, Relation::Beholden);
     connect(&mut case_graph, &suspect_indices, &suspect_indices, |a, b| a != b && rng.gen_range(0..10) > 3, Relation::Protects);
 
     for _i in 1..5 {
@@ -202,8 +217,17 @@ pub fn generate_murder() -> MurderCase {
     }
 
     let murder_edges = case_graph.edges_connecting(killer_index, victim_index);
-    let murder_edge_weights: MurderRelations = HashSet::from_iter(murder_edges.map(|edge| *edge.weight() ).collect::<Vec<Relation>>());
-    // edges...?
+    let murder_edge_weights: MurderRelations = {
+        let mut edges: MurderRelations = HashMap::new();
+        murder_edges.for_each(|edge| {
+            let source = *case_graph.node_weight(edge.source()).unwrap();
+            let target = *case_graph.node_weight(edge.target()).unwrap();
+            let weight = *edge.weight();
+            edges.insert(source, (target, weight));
+        });
+
+        edges
+    };
 
     let dot = Dot::new(&case_graph);
     let mut dot_code = String::from(&*format!("{:?}", dot));
@@ -211,5 +235,5 @@ pub fn generate_murder() -> MurderCase {
                               encode(nice_opinion_names(colorize(dot_code)).as_str()));
 
     open::that(encoded_dot).unwrap();
-    case_graph
+    (case_graph, murder_edge_weights)
 }

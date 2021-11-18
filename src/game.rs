@@ -1,8 +1,10 @@
-use bracket_lib::prelude::{BTerm, BTermBuilder, GameState, main_loop};
+use bracket_lib::prelude::{BTerm, BTermBuilder, GameState, main_loop, Point, VirtualKeyCode};
 use std::sync::{Mutex, MutexGuard};
 use crate::world::{get_world, Tick, World};
 use lazy_static::lazy_static;
 use crate::console::Console;
+use crate::geometry::Dist;
+use crate::pawn::PawnCommand;
 
 pub struct Game {
     console: Console,
@@ -13,13 +15,10 @@ impl GameState for Game {
         ctx.cls();
 
         if let mut world= get_world() {
+            world.map.update_player_fov();
+            world.map.render(ctx);
             world.receive_commands();
-        }
-
-        if let world = get_world() {
-            for c in world.chars.iter() {
-                ctx.print(1, 1, c.drawable.glyph);
-            }
+            world.update(ctx);
         }
 
         self.console.tick(ctx);
