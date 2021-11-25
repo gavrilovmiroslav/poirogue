@@ -1,9 +1,13 @@
+use std::borrow::{Borrow, BorrowMut};
 use serde::{Serialize, Deserialize};
-use std::collections::HashSet;
-use bracket_lib::prelude::{Algorithm2D, BaseMap, BLACK, BTerm, DistanceAlg, field_of_view_set, GREEN, GREY, MAGENTA, Point, RED, RGB, SmallVec, WHITE};
+use std::collections::{HashSet, VecDeque};
+use specs::{Component, VecStorage};
+use bracket_lib::prelude::*;
+use object_pool::Reusable;
 use rand::prelude::ThreadRng;
 use rand::Rng;
-use crate::pawn::Pawn;
+use crate::game::{GameCommand, OrderedDrawBatch, RenderBrain};
+use crate::geometry::Glyph;
 
 #[derive(Serialize, Deserialize, PartialEq, Clone)]
 pub enum FloorTiles {
@@ -11,10 +15,10 @@ pub enum FloorTiles {
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Clone)]
-pub enum PoirogueTile {
-    RectRoom(u8),
-    Obscured(HashSet<u8>),
-    Floor(u8, FloorTiles),
+pub enum MapTile {
+    Construction(usize),
+    Obscured,
+    Floor(usize),
     Stairs,
     Corridor,
     Door,
@@ -22,67 +26,68 @@ pub enum PoirogueTile {
     Wall
 }
 
-impl Default for PoirogueTile {
-    fn default() -> PoirogueTile {
-        PoirogueTile::Obscured(HashSet::new())
+impl Default for MapTile {
+    fn default() -> MapTile {
+        MapTile::Obscured
     }
 }
 
-impl PoirogueTile {
+impl MapTile {
     pub fn is_obscured(&self) -> bool {
         match &self {
-            PoirogueTile::Obscured(_) => true,
+            MapTile::Obscured => true,
             _ => false
         }
     }
 
     pub fn is_wall(&self) -> bool {
         match &self {
-            PoirogueTile::Obscured(_) => true,
-            PoirogueTile::Wall => true,
+            MapTile::Obscured => true,
+            MapTile::Wall => true,
             _ => false
         }
     }
 
     fn is_walkable(&self) -> bool {
         match &self {
-            PoirogueTile::Obscured(_) => false,
-            PoirogueTile::Wall | PoirogueTile::Door => false,
+            MapTile::Obscured => false,
+            MapTile::Wall | MapTile::Door => false,
             _ => true
         }
     }
 
     fn is_transparent(&self) -> bool {
         match &self {
-            PoirogueTile::RectRoom(_) => false,
-            PoirogueTile::Wall => false,
-            PoirogueTile::Obscured(_) => false,
+            MapTile::Construction(_) => false,
+            MapTile::Wall => false,
+            MapTile::Obscured => false,
             _ => true
         }
     }
 
     fn get_description(&self) -> String {
         return match &self {
-            PoirogueTile::RectRoom(_) => { "Floor".to_string() }
-            PoirogueTile::Floor(_, _) => { "Room".to_string() }
-            PoirogueTile::Obscured(_) => { "???".to_string() }
-            PoirogueTile::Stairs => { "Stairs".to_string() }
-            PoirogueTile::Corridor => { "Corridor".to_string() }
-            PoirogueTile::Door => { "Door".to_string() }
-            PoirogueTile::Center => { "Center".to_string() }
-            PoirogueTile::Wall => { "Wall".to_string() }
+            MapTile::Construction(_) => { "Floor".to_string() }
+            MapTile::Floor(_) => { "Room".to_string() }
+            MapTile::Obscured => { "???".to_string() }
+            MapTile::Stairs => { "Stairs".to_string() }
+            MapTile::Corridor => { "Corridor".to_string() }
+            MapTile::Door => { "Door".to_string() }
+            MapTile::Center => { "Center".to_string() }
+            MapTile::Wall => { "Wall".to_string() }
         }
     }
 
     fn get_glyph(&self) -> char {
         return match &self {
-            PoirogueTile::Obscured(_) => '?',
-            PoirogueTile::RectRoom(n) => (64 + n) as char,
-            PoirogueTile::Floor(_, _) | PoirogueTile::Corridor => '.',
-            PoirogueTile::Door => '+',
-            PoirogueTile::Stairs => '>',
-            PoirogueTile::Center => '*',
-            PoirogueTile::Wall => '#'
+            MapTile::Obscured => '#',
+            MapTile::Construction(n) => (64 + *n as u8) as char,
+            MapTile::Floor(n) => '.', //(64 + n) as char,
+            MapTile::Corridor => '.',
+            MapTile::Door => '+',
+            MapTile::Stairs => '>',
+            MapTile::Center => '*',
+            MapTile::Wall => '#'
         }
     }
 
@@ -90,35 +95,35 @@ impl PoirogueTile {
         let mut rng: ThreadRng = rand::thread_rng();
 
         match &self {
-            PoirogueTile::Obscured(_) => {
+            MapTile::Obscured => {
                 let color = rng.gen_range(0.05..0.1);
                 RGB::from_f32(color, color, color)
             },
-            PoirogueTile::Door => RGB::named(WHITE),
-            PoirogueTile::RectRoom(_) => RGB::named(GREEN),
-            PoirogueTile::Floor(_, _) | PoirogueTile::Corridor | PoirogueTile::Wall => {
+            MapTile::Door => RGB::named(WHITE),
+            MapTile::Construction(_) => RGB::named(GREEN),
+            MapTile::Floor(_) | MapTile::Corridor | MapTile::Wall => {
                 RGB::from_f32(
                     rng.gen_range(0.25..0.4),
                     rng.gen_range(0.25..0.4),
                     rng.gen_range(0.25..0.4))
             },
-            PoirogueTile::Stairs => RGB::named(MAGENTA),
-            PoirogueTile::Center => RGB::named(RED),
+            MapTile::Stairs => RGB::named(MAGENTA),
+            MapTile::Center => RGB::named(RED),
         }
     }
 }
 
-pub struct PoirogueMap {
+#[derive(Default)]
+pub struct Map {
     pub width: i32,
     pub height: i32,
-    pub tiles: Vec<PoirogueTile>,
+    pub tiles: Vec<MapTile>,
     pub visible: Vec<bool>, // !is_transparent
     pub blocked: Vec<bool>, // !is_walkable
     pub revealed: Vec<bool>,
-    pub entities: Vec<Pawn>,
 }
 
-impl PoirogueMap {
+impl Map {
 
     // HELPER FUNCTIONS
 
@@ -146,8 +151,8 @@ impl PoirogueMap {
         Point{ x: index as i32 % self.width, y: index as i32 / self.width }
     }
 
-    pub fn get_neighbors(&self, x: i32, y: i32) -> [PoirogueTile; 4] {
-        let mut result: [PoirogueTile; 4 ] = Default::default();
+    pub fn get_neighbors(&self, x: i32, y: i32) -> [MapTile; 4] {
+        let mut result: [MapTile; 4 ] = Default::default();
         result[0] = self.tiles[self.get_tile_index(x, y - 1).unwrap()].clone();
         result[1] = self.tiles[self.get_tile_index(x + 1, y).unwrap()].clone();
         result[2] = self.tiles[self.get_tile_index(x, y + 1).unwrap()].clone();
@@ -164,59 +169,13 @@ impl PoirogueMap {
         let mut blocked = Vec::new();
 
         for _i in 0 .. (w * h) {
-            tiles.push(PoirogueTile::default());
-            visible.push(false);
-            revealed.push(false);
+            tiles.push(MapTile::default());
+            visible.push(true);
+            revealed.push(true);
             blocked.push(true);
         }
 
-        PoirogueMap { width: w, height: h, tiles, visible, revealed, blocked, entities: Vec::new() }
-    }
-
-    #[inline(always)]
-    fn draw_tile(&self, ctx: &mut BTerm, index: usize, x: i32, y: i32) {
-        let tile = &self.tiles[index];
-
-        if self.revealed[index] {
-            let color = if !self.visible[index] { tile.get_color() } else { RGB::named(GREY) };
-            ctx.print_color(x, y, color, RGB::named(BLACK), tile.get_glyph());
-        }
-    }
-
-    pub fn render(&self, ctx: &mut BTerm) {
-        let mut index: usize = 0;
-
-        for y in 0 .. self.height {
-            for x in 0 .. self.width {
-                self.draw_tile(ctx, index, x, y);
-                index += 1;
-            }
-        }
-
-        for entity in &self.entities {
-            self.draw_entity(ctx, entity);
-        }
-
-        if let Some(player) = self.entities.get(0) {
-            self.draw_entity(ctx, player);
-        }
-    }
-
-    pub fn get_player_entity_mut(&mut self) -> &mut Pawn {
-        self.entities.get_mut(0).unwrap()
-    }
-
-    pub fn get_player_entity(&self) -> &Pawn {
-        self.entities.get(0).unwrap()
-    }
-
-    pub fn draw_entity(&self, ctx: &mut BTerm, entity: &Pawn) {
-        let Point {x, y} = entity.drawable.position;
-        match self.get_tile_index(x, y) {
-            Some(_pos) if self.visible[_pos] =>
-                ctx.print_color(x, y, entity.drawable.color, RGB::named(BLACK), entity.drawable.glyph),
-            _ => ()
-        };
+        Map { width: w, height: h, tiles, visible, revealed, blocked }
     }
 
     pub fn is_tile_walkable(&self, pos: Point) -> bool {
@@ -228,8 +187,9 @@ impl PoirogueMap {
 
     pub fn is_tile_revealed(&self, pos: Point) -> bool {
         match self.get_tile_index(pos.x, pos.y) {
-            Some(index) => self.revealed[index],
-            None => false
+            _ => true,
+/*            Some(index) => self.revealed[index],
+            None => false*/
         }
     }
 
@@ -250,44 +210,47 @@ impl PoirogueMap {
         !self.blocked[index] && self.revealed[index]
     }
 
-    pub fn set(&mut self, x: i32, y: i32, t: PoirogueTile) {
+    pub fn set(&mut self, x: i32, y: i32, t: MapTile) {
         match self.get_tile_index(x, y) {
             Some(index) => {
                 self.tiles[index] = t.clone();
-                self.blocked[index] = !t.is_walkable();
-                self.visible[index] = !t.is_transparent();
+                self.blocked[index] = false; // !t.is_walkable();
+                self.visible[index] = true; // !t.is_transparent();
             },
             None => ()
         }
     }
+}
 
-    pub fn update_player_fov(&mut self) {
-        if let Some(pawn) = self.entities.get(0) {
-            let player_position = pawn.drawable.position;
-            self.update_fov(player_position);
-        }
-    }
+impl RenderBrain for Map {
+    fn render(&self) -> OrderedDrawBatch {
+        // #[inline(always)]
+        fn draw_tile(this: &Map, batch: &mut DrawBatch, index: usize, x: i32, y: i32) {
+            let tile = &this.tiles[index];
 
-    pub fn update_fov(&mut self, pos: Point) {
-        for v in self.visible.iter_mut() {
-            *v = false;
-        }
-
-        let fov = field_of_view_set(pos, 8, self);
-
-        for index in fov.iter() {
-            let point = self.point2d_to_index(*index);
-            if self.tiles[point].is_obscured() {
-                self.tiles[point] = PoirogueTile::Wall;
+            if this.revealed[index] {
+                let color = if !this.visible[index] { tile.get_color() } else { RGB::named(GREY) };
+                batch.print_color(Point::new(x, y), tile.get_glyph(), ColorPair::new(color, RGB::named(BLACK)));
             }
-            self.visible[point] = true;
-            self.revealed[point] = true;
         }
+
+        let depth = 0;
+        let mut draw_batch = DrawBatch::new();
+        draw_batch.target(0);
+        let mut index: usize = 0;
+
+        for y in 0 .. self.height {
+            for x in 0 .. self.width {
+                draw_tile(self, draw_batch.borrow_mut(), index, x, y);
+                index += 1;
+            }
+        }
+
+        OrderedDrawBatch::new(depth, draw_batch)
     }
 }
 
-impl BaseMap for PoirogueMap {
-
+impl BaseMap for Map {
     fn is_opaque(&self, index: usize) -> bool {
         let (x, y) = self.get_tile_coords(index);
 
@@ -323,7 +286,7 @@ impl BaseMap for PoirogueMap {
     }
 }
 
-impl Algorithm2D for PoirogueMap {
+impl Algorithm2D for Map {
     fn point2d_to_index(&self, pt : Point) -> usize {
         self.get_tile_index(pt.x, pt.y).unwrap()
     }
