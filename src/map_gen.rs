@@ -1,6 +1,6 @@
 
 use bracket_lib::prelude::{Bresenham, Point, RandomNumberGenerator, Rect};
-use rand::Rng;
+use crate::rand_gen::{get_random_between};
 use crate::map::{FloorTiles, Map, MapTile};
 use std::collections::{HashMap, HashSet};
 use std::ops::{Add, Sub};
@@ -34,7 +34,6 @@ impl RelativeSizing<i32> for Rect {
 type RoomIndex = usize;
 
 pub struct MapGenStorage {
-    pub rng: RandomNumberGenerator,
     pub rects: Vec<Rect>,
     pub room_index_by_rect_index: Vec<RoomIndex>,       // index in this vector = rect index by creation order;
     pub rect_center_by_rect_index: Vec<Point>,         // index in this vector = rect index by creation order;
@@ -43,7 +42,6 @@ pub struct MapGenStorage {
 impl Default for MapGenStorage {
     fn default() -> Self {
         MapGenStorage {
-            rng: RandomNumberGenerator::seeded(0),
             rects: Default::default(),
             room_index_by_rect_index: Default::default(),
             rect_center_by_rect_index: Default::default(),
@@ -57,13 +55,11 @@ impl Default for MapGenStorage {
 }*/
 
 pub fn stamp_non_overlapping_rects(config: RectGenConfig, map: &mut Map, storage: &mut MapGenStorage) {
-    let mut rng = &mut storage.rng;
-
     for _attempt in 0..config.creation_attempts {
-        let width = rng.range (config.min_size.0, config.max_size.0);
-        let height = rng.range(config.min_size.1, config.max_size.1);
-        let x = rng.range(1, map.width - width - 1);
-        let y = rng.range(1, map.height - height - 1);
+        let width = get_random_between(config.min_size.0, config.max_size.0);
+        let height = get_random_between(config.min_size.1, config.max_size.1);
+        let x = get_random_between(1, map.width - width - 1);
+        let y = get_random_between(1, map.height - height - 1);
         let attempt_rect = Rect::with_size(x, y, width, height);
         let insides_of_rect = attempt_rect.smaller_by(1);
 
@@ -174,7 +170,7 @@ pub fn run_map_gen(w: i32, h: i32) -> Map {
     stamp_non_overlapping_rects(RectGenConfig { creation_attempts: 3, min_size: (10, 8), max_size: (12, 12) }, &mut map, &mut storage);
     stamp_non_overlapping_rects(RectGenConfig { creation_attempts: 200, min_size: (5, 5), max_size: (8, 7) }, &mut map, &mut storage);
     stamp_non_overlapping_rects(RectGenConfig { creation_attempts: 300, min_size: (4, 2), max_size: (6, 5) }, &mut map, &mut storage);
-    stamp_non_overlapping_rects(RectGenConfig { creation_attempts: 500, min_size: (2, 3), max_size: (4, 4) }, &mut map, &mut storage);
+    stamp_non_overlapping_rects(RectGenConfig { creation_attempts: 50, min_size: (2, 3), max_size: (4, 4) }, &mut map, &mut storage);
     link_rects_into_rooms(&mut map, &mut storage);
 
 //        let mut graph = Graph::new_undirected();

@@ -1,6 +1,7 @@
 use bracket_lib::prelude::{*};
 use crate::game::{Game};
 
+mod rand_gen;
 mod geometry;
 mod game;
 mod murder_gen;
@@ -12,6 +13,8 @@ fn main() {
     embedded_resource!(TILE_FONT, "../resources/classic_roguelike_white.png");
     link_resource!(TILE_FONT, "../resources/classic_roguelike_white.png");
 
+    rand_gen::init_random_with_seed(0);
+    
     Game::run();
 }
 

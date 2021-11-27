@@ -4,10 +4,9 @@ use std::collections::{HashSet, VecDeque};
 use specs::{Component, VecStorage};
 use bracket_lib::prelude::*;
 use object_pool::Reusable;
-use rand::prelude::ThreadRng;
-use rand::Rng;
 use crate::game::{GameCommand, OrderedDrawBatch, RenderBrain};
 use crate::geometry::Glyph;
+use crate::rand_gen::get_random_between;
 
 #[derive(Serialize, Deserialize, PartialEq, Clone)]
 pub enum FloorTiles {
@@ -92,20 +91,18 @@ impl MapTile {
     }
 
     fn get_color(&self) -> RGB {
-        let mut rng: ThreadRng = rand::thread_rng();
-
         match &self {
             MapTile::Obscured => {
-                let color = rng.gen_range(0.05..0.1);
+                let color = get_random_between(0.05, 0.1);
                 RGB::from_f32(color, color, color)
             },
             MapTile::Door => RGB::named(WHITE),
             MapTile::Construction(_) => RGB::named(GREEN),
             MapTile::Floor(_) | MapTile::Corridor | MapTile::Wall => {
                 RGB::from_f32(
-                    rng.gen_range(0.25..0.4),
-                    rng.gen_range(0.25..0.4),
-                    rng.gen_range(0.25..0.4))
+                    get_random_between(0.25, 0.4),
+                    get_random_between(0.25, 0.4),
+                    get_random_between(0.25, 0.4))
             },
             MapTile::Stairs => RGB::named(MAGENTA),
             MapTile::Center => RGB::named(RED),
