@@ -10,71 +10,46 @@ use object_pool::{Pool, Reusable};
 use specs::{Builder, Dispatcher, DispatcherBuilder, World, WorldExt};
 use crate::map::Map;
 use specs::prelude::*;
+use crate::commands::{FlowCommand, GameCommand, GameFlow};
 use crate::geometry::Glyph;
 use crate::input::{InputSnapshotState, InputSnapshot, KeyboardSnapshot, InputSnapshots};
 use crate::map_gen::run_map_gen;
 use crate::murder_gen::generate_murder;
+use crate::render::{OrderedDrawBatch, RenderViewer, RenderView, RenderingPassFn};
+use crate::render_view;
+use crate::tiles::MapTile;
+use crate::views::{View};
+use crate::views_impl::*;
 
-pub trait RenderBrain {
-    fn render(&self) -> OrderedDrawBatch;
-}
 
-pub enum FlowCommand {
-    GenerateLevel,
-    Exit
-}
-
-pub enum GameCommand {
-    Flow(FlowCommand),
-}
-
-pub enum GameFlow {
-    Player,
-    World,
-}
-
-pub struct OrderedDrawBatch(usize, Reusable<'static, DrawBatch>);
-
-impl OrderedDrawBatch {
-    pub fn new(z: usize, db: Reusable<'static, DrawBatch>) -> OrderedDrawBatch {
-        OrderedDrawBatch(z, db)
-    }
-
-    pub fn submit(&mut self) {
-        self.1.submit(self.0).expect("Batch error");
-    }
-}
-
-#[derive(Default)]
-pub struct FrameData {
-    batches: Vec<OrderedDrawBatch>
-}
+pub struct Entity;
 
 pub struct Game {
     pub size: (i32, i32),
     pub map: Map,
     pub flow: GameFlow,
     pub commands: VecDeque<GameCommand>,
-    pub rendering: Vec<Box<dyn Fn(&Game) -> OrderedDrawBatch>>,
+    pub rendering: Vec<RenderingPassFn>,
     pub input: InputSnapshots,
+    pub views: RenderViewer<'static>,
 }
 
 impl GameState for Game {
     fn tick(&mut self, ctx: &mut BTerm) {
-        let mut frame_data = FrameData::default();
-
         self.resolve_command_queue(ctx);
 
-        self.queue_frame_rendering(&mut frame_data);
-        for mut batch in frame_data.batches {
-            batch.submit();
+        for drawing_func in self.rendering.iter() {
+            drawing_func(self).submit();
         }
+
         render_draw_buffer(ctx);
 
         self.input.update(INPUT.lock().borrow());
         self.handle_input();
     }
 }
+
+
 
 impl Game {
     pub fn new(w: i32, h: i32) -> Game {
@@ -85,6 +60,7 @@ impl Game {
             commands: VecDeque::default(),
             rendering: Vec::new(),
             input: InputSnapshots::default(),
+            views: RenderViewer::default(),
         }
     }
 
@@ -99,8 +75,11 @@ impl Game {
 
         let mut game = Game::new(width, height);
 
-        game.rendering.push(Box::new(|game| game.map.render() ));
-        game.commands.push_back(GameCommand::Flow(FlowCommand::GenerateLevel));
+        game.views.push(render_view!(DebugView));
+        game.views.push(render_view!(GameView));
+
+        game.rendering.push(Box::new(|game| { game.map.render(game.views.get_current_view()) }));
+        //game.commands.push_back(GameCommand::Flow(FlowCommand::GenerateLevel));
 
         main_loop(term,game).unwrap();
     }
@@ -117,11 +96,9 @@ impl Game {
         if self.input.mouse.is_pressed(0) {
             self.commands.push_back(GameCommand::Flow(FlowCommand::GenerateLevel));
         }
-    }
 
-    pub fn queue_frame_rendering(&mut self, frame_data: &mut FrameData) {
-        for brain in self.rendering.iter() {
-            frame_data.batches.push(brain(self));
+        if self.input.keyboard.is_pressed(VirtualKeyCode::Tab) {
+            self.views.cycle();
         }
     }
 

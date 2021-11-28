@@ -1,13 +1,14 @@
-
+use serde::{Serialize, Deserialize};
 use bracket_lib::prelude::{Bresenham, Point, RandomNumberGenerator, Rect};
 use crate::rand_gen::{get_random_between};
-use crate::map::{FloorTiles, Map, MapTile};
+use crate::map::Map;
 use std::collections::{HashMap, HashSet};
 use std::ops::{Add, Sub};
 use petgraph::{Graph, Undirected};
 use petgraph::graph::NodeIndex;
 use petgraph::algo::min_spanning_tree;
 use petgraph::data::FromElements;
+use crate::tiles::{DebugMapTile, RectIndex, RoomIndex, TileIndex, MapTile};
 
 pub struct RectGenConfig {
     pub creation_attempts: i32,
@@ -31,12 +32,11 @@ impl RelativeSizing<i32> for Rect {
     }
 }
 
-type RoomIndex = usize;
-
 pub struct MapGenStorage {
     pub rects: Vec<Rect>,
     pub room_index_by_rect_index: Vec<RoomIndex>,       // index in this vector = rect index by creation order;
     pub rect_center_by_rect_index: Vec<Point>,         // index in this vector = rect index by creation order;
+    pub lookup_rect_by_tile_index: HashMap<TileIndex, RectIndex>,
 }
 
 impl Default for MapGenStorage {
@@ -45,6 +45,7 @@ impl Default for MapGenStorage {
             rects: Default::default(),
             room_index_by_rect_index: Default::default(),
             rect_center_by_rect_index: Default::default(),
+            lookup_rect_by_tile_index: Default::default(),
         }
     }
 }
@@ -72,43 +73,47 @@ pub fn stamp_non_overlapping_rects(config: RectGenConfig, map: &mut Map, storage
         }
 
         if okay {
-            let index = storage.rects.len() as usize;
+            let index = storage.rects.len() as RoomIndex;
             storage.rects.push(attempt_rect);
             storage.room_index_by_rect_index.push(index);   // automatic new room, will re-index later
             storage.rect_center_by_rect_index.push(attempt_rect.center());
 
             for p in attempt_rect.point_set() {
-                map.set(p.x, p.y, MapTile::Construction(index));
+                map.set(p.x, p.y, MapTile::Debug(DebugMapTile::Construction(index)));
+                storage.lookup_rect_by_tile_index.insert(map.get_tile_index(p.x, p.y).unwrap(), index);
             }
         }
     }
 }
 
-pub fn flood_fill_construction_into_floor(map: &mut Map, storage: &mut MapGenStorage, x: i32, y: i32, fill: usize) {
+pub fn flood_fill_construction_into_floor(map: &mut Map, storage: &mut MapGenStorage, x: i32, y: i32, fill_room_index: RoomIndex) {
     if x < 0 || y < 0 || x > map.width || y > map.height { return; }
 
-    if let Some(index) = map.get_tile_index(x, y) {
-        if let MapTile::Construction(_) = &map.tiles[index] {
-            map.tiles[index] = MapTile::Floor(fill);
+    if let Some(tile_index) = map.get_tile_index(x, y) {
+        if let MapTile::Debug(DebugMapTile::Construction(old_room_index)) = &map.tiles[tile_index] {
+            let rect_index = storage.lookup_rect_by_tile_index.get(&tile_index).unwrap();
 
-            flood_fill_construction_into_floor(map, storage, x - 1, y, fill);
-            flood_fill_construction_into_floor(map, storage, x, y - 1, fill);
-            flood_fill_construction_into_floor(map, storage, x, y + 1, fill);
-            flood_fill_construction_into_floor(map, storage, x + 1, y, fill);
+            map.tiles[tile_index] = MapTile::Floor(fill_room_index);
+            *storage.room_index_by_rect_index.get_mut(*rect_index).unwrap() = fill_room_index;
+
+            flood_fill_construction_into_floor(map, storage, x - 1, y, fill_room_index);
+            flood_fill_construction_into_floor(map, storage, x, y - 1, fill_room_index);
+            flood_fill_construction_into_floor(map, storage, x, y + 1, fill_room_index);
+            flood_fill_construction_into_floor(map, storage, x + 1, y, fill_room_index);
         }
     }
 }
 
 pub fn link_rects_into_rooms(map: &mut Map, storage: &mut MapGenStorage) {
-    let mut index = 0;
+    let mut room_index = 0;
     for i in 1..map.width - 1 {
         for j in 1..map.height - 1 {
             let tile = map.get_tile_index(i, j).unwrap();
-            if let MapTile::Construction(n) = map.tiles[tile] {
-                storage.room_index_by_rect_index[n] = index;
+            if let MapTile::Debug(DebugMapTile::Construction(old_room_index)) = map.tiles[tile] {
+                storage.room_index_by_rect_index[old_room_index] = room_index;
 
-                flood_fill_construction_into_floor(map, storage, i, j, index);
-                index += 1;
+                flood_fill_construction_into_floor(map, storage, i, j, room_index);
+                room_index += 1;
             }
         }
     }
