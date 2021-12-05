@@ -1,7 +1,6 @@
 use serde::{Serialize, Deserialize};
 use bracket_lib::prelude::{Algorithm2D, BaseMap, Bresenham, BresenhamCircle, DijkstraMap, line2d_bresenham, Point, RandomNumberGenerator, Rect, VectorLine};
 use crate::rand_gen::{get_random_between};
-use crate::map::{DigMap, Map};
 use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::RandomState;
 use std::ops::{Add, Range, Sub};
@@ -14,6 +13,7 @@ use petgraph::dot::{Config, Dot};
 use petgraph::prelude::EdgeRef;
 use petgraph::visit::NodeRef;
 use urlencoding::encode;
+use crate::map::Map;
 use crate::tiles::{DebugMapTile, RectIndex, RoomIndex, TileIndex, MapTile};
 
 pub struct RectGenConfig {
@@ -21,11 +21,6 @@ pub struct RectGenConfig {
     pub min_size: (i32, i32),
     pub max_size: (i32, i32),
 }
-
-/*pub struct MapGenBuilder {
-    pub nodes: Vec<NodeIndex>,
-    pub graph: Graph<Point, i32, Undirected>
-}*/
 
 trait RelativeSizing<Num>
     where Num: Add<Output=Num> + Sub<Output=Num> + Ord {
