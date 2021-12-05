@@ -31,6 +31,15 @@ impl Map {
     }
 
     #[inline(always)]
+    pub fn get_tile_index_from_point(&self, p: Point) -> Option<usize> {
+        if self.is_valid_tile(p.x, p.y) {
+            Some(((p.y * self.width) + p.x) as usize)
+        } else {
+            None
+        }
+    }
+
+    #[inline(always)]
     pub fn get_tile_index(&self, x: i32, y: i32) -> Option<usize> {
         if self.is_valid_tile(x, y) {
             Some(((y * self.width) + x) as usize)
@@ -145,6 +154,10 @@ impl Map {
 
         OrderedDrawBatch::new(depth, draw_batch)
     }
+
+    pub fn get_distance_between_points(&self, p1: Point, p2: Point) -> f32 {
+        self.get_pathing_distance(self.point2d_to_index(p1), self.point2d_to_index(p2))
+    }
 }
 
 impl BaseMap for Map {
@@ -156,22 +169,23 @@ impl BaseMap for Map {
         return false;
     }
 
+
     fn get_available_exits(&self, index: usize) -> SmallVec<[(usize, f32); 10]> {
         let mut exits : SmallVec<[(usize, f32); 10]> = SmallVec::new();
         let (x, y) = self.get_tile_coords(index);
         let w = self.width as usize;
 
         // Cardinal directions
-        if self.is_exit_valid(x - 1, y) { exits.push((index - 1, 1.0)) };
-        if self.is_exit_valid(x + 1, y) { exits.push((index + 1, 1.0)) };
-        if self.is_exit_valid(x, y - 1) { exits.push((index - w, 1.0)) };
-        if self.is_exit_valid(x, y + 1) { exits.push((index + w, 1.0)) };
+        exits.push(if self.is_exit_valid(x - 1, y) { (index - 1, 1.0) } else { (0, 0.0) });
+        exits.push(if self.is_exit_valid(x + 1, y) { (index + 1, 1.0) } else { (0, 0.0) });
+        exits.push(if self.is_exit_valid(x, y - 1) { (index - w, 1.0) } else { (0, 0.0) });
+        exits.push(if self.is_exit_valid(x, y + 1) { (index + w, 1.0) } else { (0, 0.0) });
 
         // Diagonals
-        if self.is_exit_valid(x - 1, y - 1) { exits.push(((index - w) - 1, 1.4)); }
-        if self.is_exit_valid(x + 1, y - 1) { exits.push(((index - w) + 1, 1.4)); }
-        if self.is_exit_valid(x - 1, y + 1) { exits.push(((index + w) - 1, 1.4)); }
-        if self.is_exit_valid(x + 1, y + 1) { exits.push(((index + w) + 1, 1.4)); }
+        exits.push(if self.is_exit_valid(x - 1, y - 1) { ((index - w) - 1, 1.4) } else { (0, 0.0) });
+        exits.push(if self.is_exit_valid(x + 1, y - 1) { ((index - w) + 1, 1.4) } else { (0, 0.0) });
+        exits.push(if self.is_exit_valid(x - 1, y + 1) { ((index + w) - 1, 1.4) } else { (0, 0.0) });
+        exits.push(if self.is_exit_valid(x + 1, y + 1) { ((index + w) + 1, 1.4) } else { (0, 0.0) });
 
         exits
     }
@@ -179,7 +193,7 @@ impl BaseMap for Map {
     fn get_pathing_distance(&self, index1: usize, index2: usize) -> f32 {
         let p1 = self.get_tile_point(index1);
         let p2 = self.get_tile_point(index2);
-        DistanceAlg::Pythagoras.distance2d(p1, p2)
+        DistanceAlg::Manhattan.distance2d(p1, p2)
     }
 }
 
@@ -196,3 +210,59 @@ impl Algorithm2D for Map {
         Point::new(self.width, self.height)
     }
 }
+
+
+
+pub struct DigMap<'a> {
+    pub map: &'a Map,
+    pub width: i32,
+    pub height: i32,
+    pub tiles: Vec<bool>,
+}
+
+impl<'a> DigMap<'a> {
+    pub fn new(map: &'a Map) -> DigMap {
+        let mut tiles = Vec::new();
+        for tile in &map.tiles {
+            tiles.push(*tile != MapTile::Obscured);
+        }
+
+        DigMap { map, width: map.width, height: map.height, tiles }
+    }
+}
+
+impl<'a> BaseMap for DigMap<'a> {
+    fn is_opaque(&self, index: usize) -> bool {
+        self.tiles[index]
+    }
+
+    fn get_available_exits(&self, index: usize) -> SmallVec<[(usize, f32); 10]> {
+        let mut vec = SmallVec::new();
+        let Point{ x, y } = self.index_to_point2d(index);
+        if x > 0 { vec.push((self.point2d_to_index(Point::new(x - 1, y)), 1.0)); }
+        if x < self.width - 1 { vec.push((self.point2d_to_index(Point::new(x + 1, y)), 1.0)); }
+        if y > 0 { vec.push((self.point2d_to_index(Point::new(x, y - 1)), 1.0)); }
+        if y < self.height - 1 { vec.push((self.point2d_to_index(Point::new(x, y + 1)), 1.0)); }
+        vec
+    }
+
+    fn get_pathing_distance(&self, index1: usize, index2: usize) -> f32 {
+        self.map.get_pathing_distance(index1, index2)
+    }
+}
+
+
+impl<'a> Algorithm2D for DigMap<'a> {
+    fn point2d_to_index(&self, pt : Point) -> usize {
+        ((pt.y * self.width) + pt.x) as usize
+    }
+
+    fn index_to_point2d(&self, index: usize) -> Point {
+        Point { x: index as i32 % self.width, y: index as i32 / self.width }
+    }
+
+    fn dimensions(&self) -> Point {
+        Point::new(self.width, self.height)
+    }
+}
+

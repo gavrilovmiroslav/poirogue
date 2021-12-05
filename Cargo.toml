@@ -10,6 +10,7 @@ bracket-lib = "0.8"
 bracket-terminal = "0.8.5"
 bracket-random = "0.8.2"
 bracket-noise = "0.8.2"
+bracket-pathfinding = "0.8.4"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
 rand = { version = "0.8.4", features = ["small_rng"] }
@@ -24,3 +25,4 @@ urlencoding = "2.1.0"
 strum = "0.23"
 strum_macros = "0.23"
 bit-set = "0.4.0"
+multimap = "0.8.3"
