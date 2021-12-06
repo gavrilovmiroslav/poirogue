@@ -8,7 +8,7 @@ use crate::commands::GameCommand;
 use crate::geometry::Glyph;
 use crate::rand_gen::get_random_between;
 use crate::render::{OrderedDrawBatch, RenderView};
-use crate::tiles::MapTile;
+use crate::tiles::{MapTile, TileIndex};
 use crate::views::{get_color, get_glyph, View};
 
 #[derive(Default)]
@@ -25,12 +25,17 @@ impl Map {
 
     // HELPER FUNCTIONS
 
-    #[inline(always)]
     fn is_valid_tile(&self, x:i32, y:i32) -> bool {
-        x >= 0 && x <= self.width && y >= 0 && y <= self.height
+        x >= 0 && x < self.width && y >= 0 && y < self.height
     }
 
-    #[inline(always)]
+    pub fn is_tile(&self, tile: TileIndex, tile_kind: MapTile) -> bool {
+        let p = self.index_to_point2d(tile);
+        if self.is_valid_tile(p.x, p.y) {
+            self.tiles[tile] == tile_kind
+        } else { false }
+    }
+
     pub fn get_tile_index_from_point(&self, p: Point) -> Option<usize> {
         if self.is_valid_tile(p.x, p.y) {
             Some(((p.y * self.width) + p.x) as usize)
@@ -39,7 +44,6 @@ impl Map {
         }
     }
 
-    #[inline(always)]
     pub fn get_tile_index(&self, x: i32, y: i32) -> Option<usize> {
         if self.is_valid_tile(x, y) {
             Some(((y * self.width) + x) as usize)
@@ -48,23 +52,12 @@ impl Map {
         }
     }
 
-    #[inline(always)]
     pub fn get_tile_coords(&self, index: usize) -> (i32, i32) {
         (index as i32 % self.width, index as i32 / self.width)
     }
 
-    #[inline(always)]
     fn get_tile_point(&self, index: usize) -> Point {
         Point{ x: index as i32 % self.width, y: index as i32 / self.width }
-    }
-
-    pub fn get_neighbors(&self, x: i32, y: i32) -> [MapTile; 4] {
-        let mut result: [MapTile; 4 ] = Default::default();
-        result[0] = self.tiles[self.get_tile_index(x, y - 1).unwrap()].clone();
-        result[1] = self.tiles[self.get_tile_index(x + 1, y).unwrap()].clone();
-        result[2] = self.tiles[self.get_tile_index(x, y + 1).unwrap()].clone();
-        result[3] = self.tiles[self.get_tile_index(x - 1, y).unwrap()].clone();
-        return result;
     }
 
     // MAIN FUNCTIONS
@@ -83,21 +76,6 @@ impl Map {
         }
 
         Map { width: w, height: h, tiles, visible, revealed, blocked }
-    }
-
-    pub fn is_tile_walkable(&self, pos: Point) -> bool {
-        match self.get_tile_index(pos.x, pos.y) {
-            Some(index) => self.tiles[index].is_walkable(),
-            None => false
-        }
-    }
-
-    pub fn is_tile_revealed(&self, pos: Point) -> bool {
-        match self.get_tile_index(pos.x, pos.y) {
-            _ => true,
-/*            Some(index) => self.revealed[index],
-            None => false*/
-        }
     }
 
     pub fn is_tile_transparent_xy(&self, x: i32, y: i32) -> bool {
@@ -153,10 +131,6 @@ impl Map {
         }
 
         OrderedDrawBatch::new(depth, draw_batch)
-    }
-
-    pub fn get_distance_between_points(&self, p1: Point, p2: Point) -> f32 {
-        self.get_pathing_distance(self.point2d_to_index(p1), self.point2d_to_index(p2))
     }
 }
 

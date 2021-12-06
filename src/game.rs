@@ -79,7 +79,7 @@ impl Game {
         game.views.push(render_view!(GameView));
 
         game.rendering.push(Box::new(|game| { game.map.render(game.views.get_current_view()) }));
-        //game.commands.push_back(GameCommand::Flow(FlowCommand::GenerateLevel));
+        game.commands.push_back(GameCommand::Flow(FlowCommand::GenerateLevel));
 
         main_loop(term,game).unwrap();
     }

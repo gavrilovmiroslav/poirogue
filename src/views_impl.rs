@@ -29,7 +29,7 @@ impl View<MapTile> for DebugView {
 
             MapTile::Obscured => ' ',
             MapTile::Floor(n) => (64 + *n as u8) as char,
-            MapTile::Corridor => '_',
+            MapTile::Corridor => '-',
             MapTile::Door => '+',
             MapTile::Stairs => '>',
             MapTile::Wall => '#'

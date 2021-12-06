@@ -2,18 +2,19 @@ use serde::{Serialize, Deserialize};
 use bracket_lib::prelude::{GREEN, MAGENTA, RED, RGB, WHITE};
 use crate::rand_gen::get_random_between;
 use crate::views::{View};
+use strum_macros::Display;
 
 pub type TileIndex = usize;
 pub type RectIndex = usize;
 pub type RoomIndex = usize;
 
-#[derive(Serialize, Deserialize, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, PartialEq, Clone, Debug, Display)]
 pub enum DebugMapTile {
     Construction(usize),
     RectCenter,
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, PartialEq, Clone, Debug, Display)]
 pub enum MapTile {
     Debug(DebugMapTile),
     Obscured,
@@ -31,29 +32,6 @@ impl Default for MapTile {
 }
 
 impl MapTile {
-    pub fn is_obscured(&self) -> bool {
-        match &self {
-            MapTile::Obscured => true,
-            _ => false
-        }
-    }
-
-    pub fn is_wall(&self) -> bool {
-        match &self {
-            MapTile::Obscured => true,
-            MapTile::Wall => true,
-            _ => false
-        }
-    }
-
-    pub fn is_walkable(&self) -> bool {
-        match &self {
-            MapTile::Obscured => false,
-            MapTile::Wall | MapTile::Door => false,
-            _ => true
-        }
-    }
-
     pub fn is_transparent(&self) -> bool {
         match &self {
             MapTile::Debug(_) => false,

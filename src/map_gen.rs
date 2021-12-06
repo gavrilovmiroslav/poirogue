@@ -44,34 +44,9 @@ pub struct MapGenStorage {
     pub room_index_by_rect_index: Vec<RoomIndex>,       // index in this vector = rect index by creation order;
     pub rect_center_by_rect_index: Vec<Point>,          // index in this vector = rect index by creation order;
     pub lookup_rect_by_tile_index: HashMap<TileIndex, RectIndex>,
-    pub room_graph: Graph<RoomIndex, f32>,
-    pub node_index_by_rect_index: HashMap<RoomIndex, NodeIndex>,
     pub rects_in_room: MultiMap<RoomIndex, Rect>,
-    pub edge_tiles_in_room: MultiMap<RoomIndex, TileIndex>,
-    pub edge_tiles_in_rect: MultiMap<RectIndex, TileIndex>,
+    pub door_tiles: Vec<TileIndex>,
 }
-
-impl MapGenStorage {
-    pub fn are_rects_in_same_room(&self, a: RectIndex, b: RectIndex) -> bool {
-        let room_a = self.room_index_by_rect_index[a];
-        let room_b = self.room_index_by_rect_index[b];
-        room_a == room_b
-    }
-
-    pub fn are_tiles_in_same_room(&self, a: TileIndex, b: TileIndex) -> bool {
-        let rect_a = self.lookup_rect_by_tile_index.get(&a).unwrap();
-        let rect_b = self.lookup_rect_by_tile_index.get(&b).unwrap();
-        let room_a = self.room_index_by_rect_index[*rect_a];
-        let room_b = self.room_index_by_rect_index[*rect_b];
-        room_a == room_b
-    }
-
-    pub fn get_graph_node_from_tile(&self, t: TileIndex) -> NodeIndex {
-        let index = self.room_index_by_rect_index[self.lookup_rect_by_tile_index[&t]];
-        self.node_index_by_rect_index[&index]
-    }
-}
-
 
 pub fn stamp_non_overlapping_rects(config: RectGenConfig, map: &mut Map, storage: &mut MapGenStorage) {
     for _attempt in 0..config.creation_attempts {
@@ -138,15 +113,6 @@ pub fn flood_fill_construction_into_floor(map: &mut Map, storage: &mut MapGenSto
 }
 
 pub fn glue_rects_into_rooms(map: &mut Map, storage: &mut MapGenStorage) {
-    fn points_diagonal_from(p: &Point) -> [Point;4] {
-        [
-            Point::new(p.x - 1, p.y - 1),
-            Point::new(p.x - 1, p.y + 1),
-            Point::new(p.x + 1, p.y - 1),
-            Point::new(p.x + 1, p.y + 1),
-        ]
-    }
-
     let mut room_index = 0;
     for i in 1..map.width - 1 {
         for j in 1..map.height - 1 {
@@ -160,38 +126,6 @@ pub fn glue_rects_into_rooms(map: &mut Map, storage: &mut MapGenStorage) {
                 room_index += 1;
             }
         }
-    }
-
-    for (room, rects) in &storage.rects_in_room {
-        let union = rects.iter()
-            .fold(HashSet::new(), |a, &r| {
-                let rps = &r.point_set();
-                a.union(&rps).copied().collect()
-            });
-
-        let edges = rects.iter()
-            .fold(HashSet::<Point>::new(), |a, r| {
-                let small = r.smaller_by(1);
-                let points = r.point_set();
-                let smaller_points = small.point_set();
-                let diff = points.difference(&smaller_points).map(|r| *r).collect();
-                a.union(&diff).map(|r| *r).collect()
-            });
-
-        edges.iter().for_each(|p| {
-            let out = points_diagonal_from(p).iter().fold(0, |a, p| {
-                if !union.contains(p) { a + 1 } else { a }
-            });
-
-            if out != 0 {
-                if let Some(index) = map.get_tile_index_from_point(*p) {
-                    let rect = storage.lookup_rect_by_tile_index.get(&index).unwrap();
-                    storage.edge_tiles_in_room.insert(*room, index);
-                    storage.edge_tiles_in_rect.insert(*rect, index);
-                    //map.tiles[index] = MapTile::Corridor;
-                }
-            }
-        })
     }
 }
 
@@ -252,9 +186,11 @@ pub fn link_neighbors(map: &mut Map, storage: &mut MapGenStorage) {
             if !door_candidates.is_empty() {
                 let door = door_candidates[get_random_between(0, door_candidates.len())];
                 map.tiles[door] = MapTile::Door;
+                storage.door_tiles.push(door);
             }
         }
     }
+
 
     for i in 0..storage.rects.len() {
         connect_axially(map, storage, i, 5,
@@ -279,6 +215,90 @@ pub fn link_neighbors(map: &mut Map, storage: &mut MapGenStorage) {
     }
 }
 
+pub fn remove_weird_doors(map: &mut Map, storage: &mut MapGenStorage) {
+    fn neighbors(pt: Point) -> [(Point, i32); 4] {
+        [
+            (pt + Point::new(-1, 0), 0),
+            (pt + Point::new(1, 0), 0),
+            (pt + Point::new(0, -1), 1),
+            (pt + Point::new(0, 1), 1),
+        ]
+    }
+
+    fn is_corridor_or_door(map: &Map, pt: Point) -> bool {
+        let tile = map.point2d_to_index(pt);
+        map.is_tile(tile, MapTile::Corridor) ||
+            map.is_tile(tile, MapTile::Door)
+    }
+
+    fn is_room(map: &Map, pt: Point) -> bool {
+        let tile = map.point2d_to_index(pt);
+        let is_room = if let MapTile::Floor(_) = map.tiles[tile] { true } else { false };
+        is_room
+    }
+
+    fn remove_doors_if_too_wide(map: &mut Map, storage: &mut MapGenStorage) {
+        for &door in &storage.door_tiles {
+            let pt = map.index_to_point2d(door);
+            if map.in_bounds(pt) {
+                let mut count = [0, 0];
+
+                for (neighbor, axis) in neighbors(pt) {
+                    if map.in_bounds(neighbor) {
+                        if is_corridor_or_door(map, neighbor) {
+                            count[axis as usize] += 1;
+                        }
+                    }
+                }
+
+                if count[0] != 0 && count[1] != 0 {
+                    map.tiles[door] = MapTile::Corridor;
+                }
+            }
+        }
+    }
+
+    fn remove_doors_if_crowded(map: &mut Map, storage: &mut MapGenStorage) {
+        for &door in &storage.door_tiles {
+            let pt = map.index_to_point2d(door);
+            if map.in_bounds(pt) {
+                let mut done = false;
+                let neighs = neighbors(pt);
+                for (n, axis) in neighs {
+                    if !map.in_bounds(n) {
+                        map.tiles[door] = MapTile::Corridor;
+                        done = true;
+                        break;
+                    }
+                }
+
+                if done { continue; }
+                let neighs = neighbors(pt).map(|(a, _)| a);
+
+
+                let conf1 =
+                    is_room(map, neighs[2]) &&
+                        is_room(map, neighs[3]) &&
+                        (is_corridor_or_door(map, neighs[0]) ||
+                            is_corridor_or_door(map, neighs[1]));
+
+                let conf2 =
+                    is_room(map, neighs[0]) &&
+                        is_room(map, neighs[1]) &&
+                        (is_corridor_or_door(map, neighs[2]) ||
+                            is_corridor_or_door(map, neighs[3]));
+
+                if conf1 || conf2 {
+                    map.tiles[door] = MapTile::Corridor;
+                }
+            }
+        }
+    }
+
+    remove_doors_if_too_wide(map, storage);
+    remove_doors_if_crowded(map, storage);
+}
+
 pub fn run_map_gen(w: i32, h: i32) -> Map {
     let mut map = Map::new(w, h);
     let mut storage = MapGenStorage::default();
@@ -290,6 +310,7 @@ pub fn run_map_gen(w: i32, h: i32) -> Map {
     glue_rects_into_rooms(&mut map, &mut storage);
 
     link_neighbors(&mut map, &mut storage);
+    remove_weird_doors(&mut map, &mut storage);
 
     map
 }
