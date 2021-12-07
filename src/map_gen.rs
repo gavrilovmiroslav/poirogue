@@ -123,7 +123,7 @@ pub fn glue_rects_into_rooms(map: &mut Map, storage: &mut MapGenStorage) {
 }
 
 #[derive(PartialEq)]
-enum Dir { LeftRight, UpDown };
+enum Dir { LeftRight, UpDown }
 
 pub fn link_neighbors(map: &mut Map, storage: &mut MapGenStorage) {
 
