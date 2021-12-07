@@ -143,16 +143,13 @@ pub fn link_neighbors(map: &mut Map, storage: &mut MapGenStorage) {
             Dir::UpDown => |rect: Rect, w: i32| Point::new(w, rect.y2),
         };
 
-        let checker = match axis {
-            Dir::LeftRight => |map: &Map, p: Point| {
-                let above = map.point2d_to_index(Point::new(p.x, p.y - 1));
-                let below = map.point2d_to_index(Point::new(p.x, p.y + 1));
-                map.tiles[above] == MapTile::Obscured && map.tiles[below] == MapTile::Obscured
-            },
-            Dir::UpDown => |map: &Map, p: Point| {
-                let left = map.point2d_to_index(Point::new(p.x - 1, p.y));
-                let right = map.point2d_to_index(Point::new(p.x + 1, p.y));
-                map.tiles[left] == MapTile::Obscured && map.tiles[right] == MapTile::Obscured
+        let checker = |axis: Dir| {
+            let hor = axis == Dir::LeftRight;
+
+            move |map: &Map, p: Point| {
+                let prev_tile = map.point2d_to_index(if hor { Point::new(p.x, p.y - 1) } else { Point::new(p.x - 1, p.y) });
+                let next_tile = map.point2d_to_index(if hor { Point::new(p.x, p.y + 1) } else { Point::new(p.x + 1, p.y) });
+                map.tiles[prev_tile] == MapTile::Obscured && map.tiles[next_tile] == MapTile::Obscured
             }
         };
 
@@ -217,7 +214,7 @@ pub fn link_neighbors(map: &mut Map, storage: &mut MapGenStorage) {
             }
         }
 
-        connect_by_axis_internal(map, storage, rect_index, max_dist, movement, range, side, checker);
+        connect_by_axis_internal(map, storage, rect_index, max_dist, movement, range, side, checker(axis));
     }
 
     for i in 0..storage.rects.len() {
