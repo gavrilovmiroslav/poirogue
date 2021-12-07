@@ -129,27 +129,27 @@ pub fn link_neighbors(map: &mut Map, storage: &mut MapGenStorage) {
 
     fn connect_by_axis(map: &mut Map, storage: &mut MapGenStorage, rect_index: RectIndex, max_dist: i32, axis: Dir) {
         let movement = match axis {
-            Dir::LeftRight => |p| Point::new(p.x + 1, p.y),
-            Dir::UpDown => |p| Point::new(p.x, p.y + 1),
+            Dir::LeftRight => |p: Point| Point::new(p.x + 1, p.y),
+            Dir::UpDown => |p: Point| Point::new(p.x, p.y + 1),
         };
 
         let range = match axis {
-            Dir::LeftRight => |rect| rect.y1..rect.y2,
-            Dir::UpDown => |rect| rect.x1..rect.x2,
+            Dir::LeftRight => |rect: Rect| rect.y1..rect.y2,
+            Dir::UpDown => |rect: Rect| rect.x1..rect.x2,
         };
 
         let side = match axis {
-            Dir::LeftRight => |rect, h| Point::new(rect.x2, h),
-            Dir::UpDown => |rect, w| Point::new(w, rect.y2),
+            Dir::LeftRight => |rect: Rect, h: i32| Point::new(rect.x2, h),
+            Dir::UpDown => |rect: Rect, w: i32| Point::new(w, rect.y2),
         };
 
         let checker = match axis {
-            Dir::LeftRight => |map, p| {
+            Dir::LeftRight => |map: &Map, p: Point| {
                 let above = map.point2d_to_index(Point::new(p.x, p.y - 1));
                 let below = map.point2d_to_index(Point::new(p.x, p.y + 1));
                 map.tiles[above] == MapTile::Obscured && map.tiles[below] == MapTile::Obscured
             },
-            Dir::UpDown => |map, p| {
+            Dir::UpDown => |map: &Map, p: Point| {
                 let left = map.point2d_to_index(Point::new(p.x - 1, p.y));
                 let right = map.point2d_to_index(Point::new(p.x + 1, p.y));
                 map.tiles[left] == MapTile::Obscured && map.tiles[right] == MapTile::Obscured
