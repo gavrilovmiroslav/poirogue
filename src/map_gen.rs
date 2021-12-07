@@ -5,13 +5,6 @@ use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::RandomState;
 use std::ops::{Add, Range, Sub};
 use multimap::MultiMap;
-use petgraph::{Graph, Undirected};
-use petgraph::graph::NodeIndex;
-use petgraph::algo::min_spanning_tree;
-use petgraph::data::FromElements;
-use petgraph::dot::{Config, Dot};
-use petgraph::prelude::EdgeRef;
-use petgraph::visit::NodeRef;
 use urlencoding::encode;
 use crate::map::Map;
 use crate::tiles::{DebugMapTile, RectIndex, RoomIndex, TileIndex, MapTile};
@@ -129,93 +122,125 @@ pub fn glue_rects_into_rooms(map: &mut Map, storage: &mut MapGenStorage) {
     }
 }
 
+#[derive(PartialEq)]
+enum Dir { LeftRight, UpDown };
+
 pub fn link_neighbors(map: &mut Map, storage: &mut MapGenStorage) {
-    fn connect_axially<MovePoint, PointRange, PointExtreme, HallwayChecker>
-            (map: &mut Map, storage: &mut MapGenStorage, rect_index: RectIndex, max_dist: i32,
-             movement: MovePoint, range: PointRange, side: PointExtreme, checker: HallwayChecker)
-        where
-            MovePoint: Fn(Point) -> Point,
-            PointRange: Fn(Rect) -> Range<i32>,
-            PointExtreme: Fn(Rect, i32) -> Point,
-            HallwayChecker: Fn(&Map, Point) -> bool {
 
-        let mut correct_paths = Vec::new();
-        let rect = storage.rects[rect_index];
+    fn connect_by_axis(map: &mut Map, storage: &mut MapGenStorage, rect_index: RectIndex, max_dist: i32, axis: Dir) {
+        let movement = match axis {
+            Dir::LeftRight => |p| Point::new(p.x + 1, p.y),
+            Dir::UpDown => |p| Point::new(p.x, p.y + 1),
+        };
 
-        for h in range(rect) {
-            let mut path = Vec::new();
-            let mut target = side(rect, h);
-            let home_room = storage.room_index_by_rect_index[rect_index];
+        let range = match axis {
+            Dir::LeftRight => |rect| rect.y1..rect.y2,
+            Dir::UpDown => |rect| rect.x1..rect.x2,
+        };
 
-            for _ in 0..max_dist {
-                if let Some(tile) = map.get_tile_index_from_point(target) {
-                    if let Some(&other_rect) = storage.lookup_rect_by_tile_index.get(&tile) {
-                        if other_rect == rect_index { continue; }
+        let side = match axis {
+            Dir::LeftRight => |rect, h| Point::new(rect.x2, h),
+            Dir::UpDown => |rect, w| Point::new(w, rect.y2),
+        };
 
-                        let other_room = storage.room_index_by_rect_index[other_rect];
-                        if other_room != home_room && !path.is_empty() {
-                            correct_paths.push(path);
+        let checker = match axis {
+            Dir::LeftRight => |map, p| {
+                let above = map.point2d_to_index(Point::new(p.x, p.y - 1));
+                let below = map.point2d_to_index(Point::new(p.x, p.y + 1));
+                map.tiles[above] == MapTile::Obscured && map.tiles[below] == MapTile::Obscured
+            },
+            Dir::UpDown => |map, p| {
+                let left = map.point2d_to_index(Point::new(p.x - 1, p.y));
+                let right = map.point2d_to_index(Point::new(p.x + 1, p.y));
+                map.tiles[left] == MapTile::Obscured && map.tiles[right] == MapTile::Obscured
+            }
+        };
+
+        fn connect_by_axis_internal<MovePoint, PointRange, PointExtreme, HallwayChecker>
+        (map: &mut Map, storage: &mut MapGenStorage, rect_index: RectIndex, max_dist: i32,
+         movement: MovePoint, range: PointRange, side: PointExtreme, checker: HallwayChecker)
+            where
+                MovePoint: Fn(Point) -> Point,
+                PointRange: Fn(Rect) -> Range<i32>,
+                PointExtreme: Fn(Rect, i32) -> Point,
+                HallwayChecker: Fn(&Map, Point) -> bool {
+
+            let mut correct_paths = Vec::new();
+            let rect = storage.rects[rect_index];
+
+            for h in range(rect) {
+                let mut path = Vec::new();
+                let mut target = side(rect, h);
+                let home_room = storage.room_index_by_rect_index[rect_index];
+
+                for _ in 0..max_dist {
+                    if let Some(tile) = map.get_tile_index_from_point(target) {
+                        if let Some(&other_rect) = storage.lookup_rect_by_tile_index.get(&tile) {
+                            if other_rect == rect_index { continue; }
+
+                            let other_room = storage.room_index_by_rect_index[other_rect];
+                            if other_room != home_room && !path.is_empty() {
+                                correct_paths.push(path);
+                            }
+                            break;
+                        } else {
+                            path.push(tile);
                         }
-                        break;
                     } else {
-                        path.push(tile);
+                        break;
                     }
-                } else {
-                    break;
-                }
 
-                target = movement(target);
-            }
-        }
-
-        if !correct_paths.is_empty() {
-            let mut door_candidates = Vec::new();
-
-            let random = get_random_between(0, correct_paths.len());
-            let path = &correct_paths[random];
-            let len = path.len();
-
-            for i in 0..len {
-                let tile = path[i];
-                map.tiles[tile] = MapTile::Corridor;
-                if checker(map, map.index_to_point2d(tile)) {
-                    door_candidates.push(tile);
+                    target = movement(target);
                 }
             }
 
-            if !door_candidates.is_empty() {
-                let door = door_candidates[get_random_between(0, door_candidates.len())];
-                map.tiles[door] = MapTile::Door;
-                storage.door_tiles.push(door);
+            if !correct_paths.is_empty() {
+                let mut door_candidates = Vec::new();
+
+                let random = get_random_between(0, correct_paths.len());
+                let path = &correct_paths[random];
+                let len = path.len();
+
+                for i in 0..len {
+                    let tile = path[i];
+                    map.tiles[tile] = MapTile::Corridor;
+                    if checker(map, map.index_to_point2d(tile)) {
+                        door_candidates.push(tile);
+                    }
+                }
+
+                if !door_candidates.is_empty() {
+                    let door = door_candidates[get_random_between(0, door_candidates.len())];
+                    map.tiles[door] = MapTile::Door;
+                    storage.door_tiles.push(door);
+                }
             }
         }
+
+        connect_by_axis_internal(map, storage, rect_index, max_dist, movement, range, side, checker);
     }
 
-
     for i in 0..storage.rects.len() {
-        connect_axially(map, storage, i, 5,
-                        |p| Point::new(p.x + 1, p.y),
-                           |rect| rect.y1..rect.y2,
-                            |rect, h| Point::new(rect.x2, h),
-                          |map, p| {
-                              let above = map.point2d_to_index(Point::new(p.x, p.y - 1));
-                              let below = map.point2d_to_index(Point::new(p.x, p.y + 1));
-                              map.tiles[above] == MapTile::Obscured && map.tiles[below] == MapTile::Obscured
-                          });
-
-        connect_axially(map, storage, i, 3,
-                        |p| Point::new(p.x, p.y + 1),
-                        |rect| rect.x1..rect.x2,
-                        |rect, w| Point::new(w, rect.y2),
-                        |map, p| {
-                            let left = map.point2d_to_index(Point::new(p.x - 1, p.y));
-                            let right = map.point2d_to_index(Point::new(p.x + 1, p.y));
-                            map.tiles[left] == MapTile::Obscured && map.tiles[right] == MapTile::Obscured
-                        });
+        connect_by_axis(map, storage, i, 5, Dir::LeftRight);
+        connect_by_axis(map, storage, i, 3, Dir::UpDown);
     }
 }
 
 pub fn remove_weird_doors(map: &mut Map, storage: &mut MapGenStorage) {
+    const LEFT: i32 = 0;
+    const RIGHT: i32 = 1;
+    const UP: i32 = 2;
+    const DOWN: i32 = 3;
+
+    fn check_door_between_two_rooms(map: &Map, neighbors: [Point; 4], main_dir: Dir) -> bool {
+        let dir = if main_dir == Dir::LeftRight { 0 } else { 2 };
+
+        is_room(map, neighbors[dir]) &&
+            is_room(map, neighbors[dir + 1]) &&
+            (is_corridor_or_door(map, neighbors[(dir + 2) % 4]) ||
+                is_corridor_or_door(map, neighbors[(dir + 3) % 4]))
+    }
+
     fn neighbors(pt: Point) -> [(Point, i32); 4] {
         [
             (pt + Point::new(-1, 0), 0),
@@ -273,22 +298,10 @@ pub fn remove_weird_doors(map: &mut Map, storage: &mut MapGenStorage) {
                 }
 
                 if done { continue; }
-                let neighs = neighbors(pt).map(|(a, _)| a);
+                let neighbors = neighbors(pt).map(|(a, _)| a);
 
-
-                let conf1 =
-                    is_room(map, neighs[2]) &&
-                        is_room(map, neighs[3]) &&
-                        (is_corridor_or_door(map, neighs[0]) ||
-                            is_corridor_or_door(map, neighs[1]));
-
-                let conf2 =
-                    is_room(map, neighs[0]) &&
-                        is_room(map, neighs[1]) &&
-                        (is_corridor_or_door(map, neighs[2]) ||
-                            is_corridor_or_door(map, neighs[3]));
-
-                if conf1 || conf2 {
+                if check_door_between_two_rooms(map, neighbors, Dir::LeftRight) ||
+                    check_door_between_two_rooms(map, neighbors, Dir::UpDown) {
                     map.tiles[door] = MapTile::Corridor;
                 }
             }
