@@ -7,7 +7,7 @@ use object_pool::Reusable;
 use crate::commands::GameCommand;
 use crate::geometry::Glyph;
 use crate::rand_gen::get_random_between;
-use crate::render::{OrderedDrawBatch, RenderView};
+use crate::render::{RenderView};
 use crate::tiles::{MapTile, TileIndex};
 use crate::views::{get_color, get_glyph, View};
 
@@ -108,29 +108,25 @@ impl Map {
 }
 
 impl Map {
-    pub fn render(&self, view: &RenderView) -> OrderedDrawBatch {
-        fn draw_tile(this: &Map, batch: &mut DrawBatch, view: &dyn View<MapTile>, index: usize, x: i32, y: i32) {
+    pub fn render(&self, ctx: &mut BTerm, view: &RenderView) {
+        fn draw_tile(this: &Map, ctx: &mut BTerm, view: &dyn View<MapTile>, index: usize, x: i32, y: i32) {
             let tile = &this.tiles[index];
 
             if this.revealed[index] {
                 let color = if !this.visible[index] { get_color(tile, view) } else { RGB::named(GREY) };
-                batch.print_color(Point::new(x, y), get_glyph(tile, view), ColorPair::new(color, RGB::named(BLACK)));
+                ctx.print_color(x, y, color, RGB::named(BLACK), get_glyph(tile, view));
             }
         }
 
-        let depth = 0;
-        let mut draw_batch = DrawBatch::new();
-        draw_batch.target(0);
+        ctx.cls();
         let mut index: usize = 0;
 
         for y in 0 .. self.height {
             for x in 0 .. self.width {
-                draw_tile(self, draw_batch.borrow_mut(), view.tile_render, index, x, y);
+                draw_tile(self, ctx, view.tile_render, index, x, y);
                 index += 1;
             }
         }
-
-        OrderedDrawBatch::new(depth, draw_batch)
     }
 }
 
