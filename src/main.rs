@@ -29,10 +29,12 @@ pub struct Opt {
 
 embedded_resource!(TILE_FONT, "../resources/classic_roguelike_white.png");
 embedded_resource!(IMAGE_FONT, "../resources/MRMOTEXTEX_rexpaintx2.png");
+embedded_resource!(TEXT_FONT, "../resources/8x8glyphs.png");
 
 fn main() {
     link_resource!(TILE_FONT, "../resources/classic_roguelike_white.png");
     link_resource!(IMAGE_FONT, "../resources/MRMOTEXTEX_rexpaintx2.png");
+    link_resource!(TEXT_FONT, "../resources/8x8glyphs.png");
 
     Game::run(Opt::from_args());
 }

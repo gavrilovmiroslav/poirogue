@@ -19,8 +19,9 @@ use crate::geometry::Glyph;
 use crate::input::{InputSnapshotState, InputSnapshot, KeyboardSnapshot, InputSnapshots};
 use crate::map_gen::run_map_gen;
 use crate::murder_gen::generate_murder;
-use crate::render::{RenderViewer, RenderView, RenderingPassFn};
+use crate::render::{RenderViewGroup, RenderView, RenderingPassFn};
 use crate::{Opt, rand_gen, render_view};
+use crate::rand_gen::get_random_between;
 use crate::rex::draw_rex;
 use crate::tiles::MapTile;
 use crate::views::{View};
@@ -30,41 +31,44 @@ use crate::views_impl::*;
 pub struct Entity;
 
 pub struct Game {
+    pub shared_data: GameSharedData,
+    pub rendering: Vec<RenderingPassFn>,
+}
+
+pub struct GameSharedData {
+    pub dirty: bool,
     pub size: (i32, i32),
     pub map: Map,
     pub flow: GameFlow,
     pub commands: VecDeque<GameCommand>,
-    pub rendering: Vec<RenderingPassFn>,
     pub input: InputSnapshots,
-    pub views: RenderViewer<'static>,
     pub data: Box<dyn Cave>,
+    pub views: RenderViewGroup<'static>,
 }
 
 impl GameState for Game {
     fn tick(&mut self, ctx: &mut BTerm) {
-        self.resolve_command_queue(ctx);
+        self.shared_data.resolve_command_queue(ctx);
 
         for drawing_func in self.rendering.iter() {
-            drawing_func(self, ctx);
+            drawing_func(&mut self.shared_data, ctx);
         }
 
-        let xy = ctx.mouse_pos();
-
-        self.input.update(INPUT.lock().borrow());
-        self.handle_input();
+        self.shared_data.handle_input();
+        self.shared_data.dirty = false;
     }
 }
 
-impl Game {
-    pub fn new(w: i32, h: i32, args: &Opt) -> Game {
-        Game {
+impl GameSharedData {
+    pub fn new(w: i32, h: i32, args: &Opt) -> GameSharedData {
+        GameSharedData {
+            dirty: true,
             size: (w, h),
             map: Map::new(w, h),
             flow: GameFlow::Player,
             commands: VecDeque::default(),
-            rendering: Vec::new(),
             input: InputSnapshots::default(),
-            views: RenderViewer::default(),
+            views: RenderViewGroup::default(),
             data: if args.release_mode {
                 println!("Loading data from binarized file...");
                 Box::new(ReadonlyArchiveCave::open("resources/data.bin"))
@@ -72,6 +76,56 @@ impl Game {
                 println!("Loading data from resource folder...");
                 Box::new(FileCave::new(Path::new("resources/data")).unwrap())
             },
+        }
+    }
+
+    pub fn handle_input(&mut self) {
+        fn handle_editor_input(game: &mut GameSharedData) {
+            if game.input.keyboard.is_released(VirtualKeyCode::Escape) {
+                game.commands.push_back(GameCommand::Flow(FlowCommand::Exit));
+            }
+
+            if game.input.keyboard.is_pressed(VirtualKeyCode::Return) {
+                game.commands.push_back(GameCommand::Flow(FlowCommand::GenerateLevel));
+            }
+
+            if game.input.mouse.is_pressed(0) {
+                game.commands.push_back(GameCommand::Flow(FlowCommand::GenerateLevel));
+            }
+
+            if game.input.keyboard.is_pressed(VirtualKeyCode::Tab) {
+                game.commands.push_back(GameCommand::Flow(FlowCommand::CycleViews));
+            }
+        }
+
+        self.input.update(INPUT.lock().borrow());
+        handle_editor_input(self);
+    }
+
+    fn resolve_command_queue(&mut self, ctx: &mut BTerm) {
+        while let Some(comm) = self.commands.pop_front() {
+            match comm {
+                GameCommand::Flow(FlowCommand::GenerateLevel) => {
+                    self.map = run_map_gen(self.size.0, self.size.1);
+                },
+
+                GameCommand::Flow(FlowCommand::Exit) => ctx.quit(),
+
+                GameCommand::Flow(FlowCommand::CycleViews) => {
+                    self.views.cycle();
+                },
+            }
+
+            self.dirty = true;
+        }
+    }
+}
+
+impl Game {
+    pub fn new(w: i32, h: i32, args: &Opt) -> Game {
+        Game {
+            shared_data: GameSharedData::new(w, h, args),
+            rendering: Vec::new(),
         }
     }
 
@@ -86,83 +140,49 @@ impl Game {
 
         let (width, height) = (80, 50);
         let term = BTermBuilder::new()
+            .with_vsync(false)
             .with_title("Poirogue")
             .with_font("classic_roguelike_white.png", 8, 8)
             .with_font("MRMOTEXTEX_rexpaintx2.png", 16, 16)
+            .with_font("8x8glyphs.png", 8, 8)
 
             .with_simple_console(width, height, "classic_roguelike_white.png")
             .with_tile_dimensions(16,16)
 
             .with_sparse_console(width, height, "MRMOTEXTEX_rexpaintx2.png")
             .with_tile_dimensions(16,16)
+
+            .with_sparse_console(width, height, "8x8glyphs.png")
+            .with_tile_dimensions(16,16)
+
             .build().unwrap();
 
         let mut game = Game::new(width, height, &args);
 
-        game.views.push(render_view!(DebugView));
-        game.views.push(render_view!(GameView));
+        game.shared_data.views.push(render_view!(DebugView));
+        game.shared_data.views.push(render_view!(GameView));
 
         game.rendering.push(Box::new(|game, ctx| {
-            ctx.set_active_console(0);
-            game.map.render(ctx,game.views.get_current_view());
+            if game.dirty {
+                ctx.set_active_console(0);
+                ctx.cls();
+                game.map.render(ctx, game.views.get_current_view());
+            }
         }));
 
         game.rendering.push(Box::new(|game, ctx| {
             ctx.set_active_console(1);
             ctx.cls();
-            let mouse = ctx.mouse_pos();
-            let data = game.data.borrow();
-            draw_rex(data, ctx, "frame", mouse.0 + 1, mouse.1 + 1);
-            draw_rex(data, ctx,"skull", mouse.0 + 2, mouse.1 + 2);
-            draw_rex(data, ctx, "frame", mouse.0 + 9, mouse.1 + 9);
-            draw_rex(data, ctx,"skull", mouse.0 + 10, mouse.1 + 10);
-            draw_rex(data, ctx, "frame", mouse.0 + 9, mouse.1 + 1);
-            draw_rex(data, ctx,"skull", mouse.0 + 10, mouse.1 + 2);
-            draw_rex(data, ctx, "frame", mouse.0 + 1, mouse.1 + 9);
-            draw_rex(data, ctx,"skull", mouse.0 + 2, mouse.1 + 10);
+            let pos = ctx.mouse_pos();
+            draw_rex(game, ctx,"skull", pos.0 + 2, pos.1 + 2);
+
+            ctx.set_active_console(2);
+            ctx.cls();
+            ctx.print_color(1, 1, RGB::named(WHITE), RGB::named(BLACK), format!("FPS: {}", ctx.fps));
         }));
 
-        game.rendering.push(Box::new(|game, ctx| {
-            ctx.set_active_console(0);
-            ctx.print_color(2, 2, RGB::named(WHITE), RGB::named(BLACK), format!(" FPS: {} ", ctx.fps));
-        }));
-
-        game.commands.push_back(GameCommand::Flow(FlowCommand::GenerateLevel));
+        game.shared_data.commands.push_back(GameCommand::Flow(FlowCommand::GenerateLevel));
 
         main_loop(term,game).unwrap();
-    }
-
-    pub fn handle_input(&mut self) {
-        fn handle_editor_input(game: &mut Game) {
-            if game.input.keyboard.is_released(VirtualKeyCode::Escape) {
-                game.commands.push_back(GameCommand::Flow(FlowCommand::Exit));
-            }
-
-            if game.input.keyboard.is_pressed(VirtualKeyCode::Return) {
-                game.commands.push_back(GameCommand::Flow(FlowCommand::GenerateLevel));
-            }
-
-            if game.input.mouse.is_pressed(0) {
-                game.commands.push_back(GameCommand::Flow(FlowCommand::GenerateLevel));
-            }
-
-            if game.input.keyboard.is_pressed(VirtualKeyCode::Tab) {
-                game.views.cycle();
-            }
-        }
-
-        handle_editor_input(self);
-    }
-
-    fn resolve_command_queue(&mut self, ctx: &mut BTerm) {
-        while let Some(comm) = self.commands.pop_front() {
-            match comm {
-                GameCommand::Flow(FlowCommand::GenerateLevel) => {
-                    self.map = run_map_gen(self.size.0, self.size.1);
-                },
-
-                GameCommand::Flow(FlowCommand::Exit) => ctx.quit()
-            }
-        }
     }
 }

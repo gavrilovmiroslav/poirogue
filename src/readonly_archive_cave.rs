@@ -3,6 +3,8 @@ use std::path::Path;
 use caves::Cave;
 use caves::res::Res;
 use filearco::v1::FileArco;
+use lru::{DefaultHasher, LruCache};
+use lazy_static::*;
 
 pub struct ReadonlyArchiveCave {
     archive: FileArco,
@@ -16,7 +18,7 @@ impl ReadonlyArchiveCave {
 
         let output = File::create(output_path).unwrap();
         let file_data = filearco::get_file_data(data_path).ok().unwrap();
-        FileArco::make(file_data, output).unwrap();
+        FileArco::make(file_data, output);
     }
 
     pub fn open(path: &'static str) -> ReadonlyArchiveCave {
@@ -37,6 +39,6 @@ impl Cave for ReadonlyArchiveCave {
     }
 
     fn delete(&self, name: &str) -> Res {
-        panic!("You're attempting to delete values from a read-only archive.");
+        panic!("You're attempting to delete values in a read-only archive.");
     }
 }

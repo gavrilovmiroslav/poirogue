@@ -1,12 +1,30 @@
-use bracket_lib::prelude::{BTerm, XpFile};
+use std::borrow::Borrow;
+use std::sync::Mutex;
+use bracket_lib::prelude::{BTerm, xp_to_draw_batch, XpFile};
 use caves::Cave;
+use lru::{DefaultHasher, LruCache};
+use lazy_static::*;
+use object_pool::Reusable;
+use crate::game::{Game, GameSharedData};
+use bracket_lib::prelude::DrawBatch;
 
-fn get_rex_from_cave(cave: &dyn Cave, name: &str) -> XpFile {
-    let buffer: Vec<u8> = cave.get(format!("{}.xp", name).as_str()).unwrap();
+lazy_static! {
+    static ref LRU: Mutex<LruCache<&'static str, XpFile>> = Mutex::new(LruCache::with_hasher(2, DefaultHasher::default()));
+}
+
+fn dig_from_cave(data: &dyn Cave, name: &'static str) -> XpFile {
+    let buffer: Vec<u8> = data.get(format!("{}.xp", name).as_str()).unwrap();
     XpFile::read(&mut &*buffer).unwrap()
 }
 
-pub fn draw_rex(data: &dyn Cave, ctx: &mut BTerm, name: &str, x: i32, y: i32) {
-    let xp = get_rex_from_cave(data, name);
-    ctx.render_xp_sprite(&xp, x, y);
+pub fn draw_rex(game: &mut GameSharedData, ctx: &mut BTerm, name: &'static str, x: i32, y: i32) {
+    if let mut lru = LRU.lock().unwrap() {
+        if !lru.contains(&name) {
+            let rex = dig_from_cave(game.data.borrow(), name);
+            ctx.render_xp_sprite(&rex, x, y);
+            lru.put(name, rex);
+        } else {
+            ctx.render_xp_sprite(lru.get(&name).unwrap(), x, y);
+        }
+    }
 }

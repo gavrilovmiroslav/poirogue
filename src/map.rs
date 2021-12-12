@@ -109,24 +109,24 @@ impl Map {
 
 impl Map {
     pub fn render(&self, ctx: &mut BTerm, view: &RenderView) {
-        fn draw_tile(this: &Map, ctx: &mut BTerm, view: &dyn View<MapTile>, index: usize, x: i32, y: i32) {
-            let tile = &this.tiles[index];
-
-            if this.revealed[index] {
-                let color = if !this.visible[index] { get_color(tile, view) } else { RGB::named(GREY) };
-                ctx.print_color(x, y, color, RGB::named(BLACK), get_glyph(tile, view));
-            }
-        }
-
-        ctx.cls();
         let mut index: usize = 0;
+
+        let mut batch = DrawBatch::new();
 
         for y in 0 .. self.height {
             for x in 0 .. self.width {
-                draw_tile(self, ctx, view.tile_render, index, x, y);
+                let tile = &self.tiles[index];
+
+                if self.revealed[index] {
+                    let color = if !self.visible[index] { get_color(tile, view.tile_render) } else { RGB::named(GREY) };
+                    batch.print_color(Point::new(x, y), get_glyph(tile, view.tile_render), ColorPair::new(color, RGB::named(BLACK)));
+                }
                 index += 1;
             }
         }
+
+        batch.submit(0).unwrap();
+        render_draw_buffer(ctx).unwrap();
     }
 }
 

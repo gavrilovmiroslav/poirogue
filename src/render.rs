@@ -2,7 +2,7 @@
 use object_pool::Reusable;
 use bracket_lib::prelude::*;
 use caves::Cave;
-use crate::game::{Entity, Game};
+use crate::game::{Entity, Game, GameSharedData};
 use crate::tiles::MapTile;
 use crate::views::View;
 
@@ -12,12 +12,12 @@ pub struct RenderView<'a> {
 }
 
 #[derive(Default)]
-pub struct RenderViewer<'a> {
+pub struct RenderViewGroup<'a> {
     pub views: Vec<RenderView<'a>>,
     current_view: usize,
 }
 
-impl<'a> RenderViewer<'a> {
+impl<'a> RenderViewGroup<'a> {
     pub fn cycle(&mut self) {
         self.current_view += 1;
         if self.current_view >= self.views.len() {
@@ -39,4 +39,4 @@ macro_rules! render_view {
     ($t: expr) => { RenderView{ tile_render: &$t as &dyn View<MapTile>, entity_render: &$t as &dyn View<Entity> } }
 }
 
-pub type RenderingPassFn = Box<dyn Fn(&Game, &mut BTerm)>;
+pub type RenderingPassFn = Box<dyn Fn(&mut GameSharedData, &mut BTerm)>;
