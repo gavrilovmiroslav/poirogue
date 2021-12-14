@@ -1,0 +1,12 @@
+use structopt::*;
+
+#[derive(Debug, StructOpt)]
+#[structopt(name = "Poirogue")]
+pub struct Opt {
+    #[structopt(short = "seed", long, default_value = "0")]
+    pub random_seed: u64,
+    #[structopt(short = "r", long)]
+    pub release_mode: bool,
+    #[structopt(short = "b", long)]
+    pub skip_binarize_on_boot: bool,
+}

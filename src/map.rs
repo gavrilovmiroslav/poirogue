@@ -1,7 +1,6 @@
 use std::borrow::{Borrow, BorrowMut};
 use serde::{Serialize, Deserialize};
 use std::collections::{HashSet, VecDeque};
-use specs::{Component, VecStorage};
 use bracket_lib::prelude::*;
 use object_pool::Reusable;
 use crate::commands::GameCommand;

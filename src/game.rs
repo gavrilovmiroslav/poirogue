@@ -10,9 +10,10 @@ use std::sync::{Arc, Mutex, RwLock};
 use bracket_lib::prelude::*;
 use caves::{Cave, FileCave, MemoryCave};
 use object_pool::{Pool, Reusable};
-use specs::{Builder, Dispatcher, DispatcherBuilder, World, WorldExt};
+use planck_ecs::{Dispatcher, DispatcherBuilder, World};
+use lazy_static::*;
+
 use crate::map::Map;
-use specs::prelude::*;
 use crate::readonly_archive_cave::ReadonlyArchiveCave;
 use crate::commands::{FlowCommand, GameCommand, GameFlow};
 use crate::geometry::Glyph;
@@ -20,13 +21,13 @@ use crate::input::{InputSnapshotState, InputSnapshot, KeyboardSnapshot, InputSna
 use crate::map_gen::run_map_gen;
 use crate::murder_gen::generate_murder;
 use crate::render::{RenderViewGroup, RenderView, RenderingPassFn};
-use crate::{Opt, rand_gen, render_view};
+use crate::{rand_gen, render_view};
+use crate::opt::Opt;
 use crate::rand_gen::get_random_between;
 use crate::rex::draw_rex;
 use crate::tiles::MapTile;
 use crate::views::{View};
 use crate::views_impl::*;
-
 
 pub struct Entity;
 
@@ -44,6 +45,8 @@ pub struct GameSharedData {
     pub input: InputSnapshots,
     pub data: Box<dyn Cave>,
     pub views: RenderViewGroup<'static>,
+    pub world: World,
+    dispatcher: Dispatcher,
 }
 
 impl GameState for Game {
@@ -56,11 +59,18 @@ impl GameState for Game {
 
         self.shared_data.handle_input();
         self.shared_data.dirty = false;
+
+        self.shared_data.run_systems();
     }
 }
 
 impl GameSharedData {
     pub fn new(w: i32, h: i32, args: &Opt) -> GameSharedData {
+        let mut world = World::default();
+
+        let dispatcher = DispatcherBuilder::new()
+            .build(&mut world);
+
         GameSharedData {
             dirty: true,
             size: (w, h),
@@ -76,7 +86,13 @@ impl GameSharedData {
                 println!("Loading data from resource folder...");
                 Box::new(FileCave::new(Path::new("resources/data")).unwrap())
             },
+            world,
+            dispatcher
         }
+    }
+
+    pub fn run_systems(&mut self) {
+        self.dispatcher.run_seq(&mut self.world);
     }
 
     pub fn handle_input(&mut self) {
@@ -124,8 +140,8 @@ impl GameSharedData {
 impl Game {
     pub fn new(w: i32, h: i32, args: &Opt) -> Game {
         Game {
-            shared_data: GameSharedData::new(w, h, args),
             rendering: Vec::new(),
+            shared_data: GameSharedData::new(w, h, args)
         }
     }
 
