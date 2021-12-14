@@ -108,9 +108,9 @@ impl GameSharedData {
                 GameCommand::Flow(FlowCommand::Exit) => ctx.quit(),
 
                 GameCommand::Flow(FlowCommand::CycleViews) => {
-                    let mut view = self.store.get::<u8>("view").unwrap_or(0);
-                    view = (view + 1) % 2;
-                    self.store.set::<u8>("view", &view);
+                    let mut view = Views::from(self.store.get::<u8>("view").unwrap_or(0));
+                    view =  view.toggle();
+                    self.store.set::<u8>("view", &u8::from(view));
                 },
             }
 
@@ -157,28 +157,24 @@ impl Game {
 
         let mut game = Game::new(width, height, &args);
 
-        // game view
-        game.rendering.push(Box::new(|game, ctx| {
+        fn render_map_if_dirty_and_view(view: &Views, game: &GameSharedData, ctx: &mut BTerm) {
             if game.dirty {
-                let mut view = game.store.get::<u8>("view").unwrap_or(0);
-                if view == 0 {
+                if *view == Views::from(game.store.get::<u8>("view").unwrap_or(0)) {
                     ctx.set_active_console(0);
                     ctx.cls();
-                    game.map.render(ctx, &GameView {});
+                    game.map.render(ctx, view);
                 }
             }
+        }
+
+        // game view
+        game.rendering.push(Box::new(|game, ctx| {
+            render_map_if_dirty_and_view(&Views::Game, game, ctx);
         }));
 
         // debug view
         game.rendering.push(Box::new(|game, ctx| {
-            if game.dirty {
-                let mut view = game.store.get::<u8>("view").unwrap_or(0);
-                if view == 1 {
-                    ctx.set_active_console(0);
-                    ctx.cls();
-                    game.map.render(ctx, &DebugView {});
-                }
-            }
+            render_map_if_dirty_and_view(&Views::Debug, game, ctx);
         }));
 
         // gui
