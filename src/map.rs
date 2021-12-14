@@ -6,9 +6,8 @@ use object_pool::Reusable;
 use crate::commands::GameCommand;
 use crate::geometry::Glyph;
 use crate::rand_gen::get_random_between;
-use crate::render::{RenderView};
 use crate::tiles::{MapTile, TileIndex};
-use crate::views::{get_color, get_glyph, View};
+use crate::views::{View};
 
 #[derive(Default)]
 pub struct Map {
@@ -107,7 +106,7 @@ impl Map {
 }
 
 impl Map {
-    pub fn render(&self, ctx: &mut BTerm, view: &RenderView) {
+    pub fn render(&self, ctx: &mut BTerm, view: &dyn View) {
         let mut index: usize = 0;
 
         let mut batch = DrawBatch::new();
@@ -117,8 +116,8 @@ impl Map {
                 let tile = &self.tiles[index];
 
                 if self.revealed[index] {
-                    let color = if !self.visible[index] { get_color(tile, view.tile_render) } else { RGB::named(GREY) };
-                    batch.print_color(Point::new(x, y), get_glyph(tile, view.tile_render), ColorPair::new(color, RGB::named(BLACK)));
+                    let color = if !self.visible[index] { view.get_color(tile) } else { RGB::named(GREY) };
+                    batch.print_color(Point::new(x, y), view.get_glyph(tile), ColorPair::new(color, RGB::named(BLACK)));
                 }
                 index += 1;
             }

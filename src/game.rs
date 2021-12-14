@@ -12,6 +12,7 @@ use caves::{Cave, FileCave, MemoryCave};
 use object_pool::{Pool, Reusable};
 use planck_ecs::{Dispatcher, DispatcherBuilder, World};
 use lazy_static::*;
+use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 
 use crate::map::Map;
 use crate::readonly_archive_cave::ReadonlyArchiveCave;
@@ -20,16 +21,20 @@ use crate::geometry::Glyph;
 use crate::input::{InputSnapshotState, InputSnapshot, KeyboardSnapshot, InputSnapshots};
 use crate::map_gen::run_map_gen;
 use crate::murder_gen::generate_murder;
-use crate::render::{RenderViewGroup, RenderView, RenderingPassFn};
-use crate::{rand_gen, render_view};
+use crate::{rand_gen};
 use crate::opt::Opt;
 use crate::rand_gen::get_random_between;
 use crate::rex::draw_rex;
 use crate::tiles::MapTile;
 use crate::views::{View};
-use crate::views_impl::*;
+use crate::views::*;
 
-pub struct Entity;
+pub trait Entity
+{
+    fn tick(&mut self, data: &GameSharedData);
+}
+
+pub type RenderingPassFn = Box<dyn Fn(&mut GameSharedData, &mut BTerm)>;
 
 pub struct Game {
     pub shared_data: GameSharedData,
@@ -44,32 +49,12 @@ pub struct GameSharedData {
     pub commands: VecDeque<GameCommand>,
     pub input: InputSnapshots,
     pub data: Box<dyn Cave>,
-    pub views: RenderViewGroup<'static>,
-    pub world: World,
-    dispatcher: Dispatcher,
-}
-
-impl GameState for Game {
-    fn tick(&mut self, ctx: &mut BTerm) {
-        self.shared_data.resolve_command_queue(ctx);
-
-        for drawing_func in self.rendering.iter() {
-            drawing_func(&mut self.shared_data, ctx);
-        }
-
-        self.shared_data.handle_input();
-        self.shared_data.dirty = false;
-
-        self.shared_data.run_systems();
-    }
+    pub entities: Vec<Rc<RefCell<dyn Entity>>>,
+    pub store: PickleDb,
 }
 
 impl GameSharedData {
     pub fn new(w: i32, h: i32, args: &Opt) -> GameSharedData {
-        let mut world = World::default();
-
-        let dispatcher = DispatcherBuilder::new()
-            .build(&mut world);
 
         GameSharedData {
             dirty: true,
@@ -78,7 +63,6 @@ impl GameSharedData {
             flow: GameFlow::Player,
             commands: VecDeque::default(),
             input: InputSnapshots::default(),
-            views: RenderViewGroup::default(),
             data: if args.release_mode {
                 println!("Loading data from binarized file...");
                 Box::new(ReadonlyArchiveCave::open("resources/data.bin"))
@@ -86,13 +70,9 @@ impl GameSharedData {
                 println!("Loading data from resource folder...");
                 Box::new(FileCave::new(Path::new("resources/data")).unwrap())
             },
-            world,
-            dispatcher
+            entities: Vec::default(),
+            store: PickleDb::new("", PickleDbDumpPolicy::NeverDump, SerializationMethod::Bin),
         }
-    }
-
-    pub fn run_systems(&mut self) {
-        self.dispatcher.run_seq(&mut self.world);
     }
 
     pub fn handle_input(&mut self) {
@@ -128,7 +108,9 @@ impl GameSharedData {
                 GameCommand::Flow(FlowCommand::Exit) => ctx.quit(),
 
                 GameCommand::Flow(FlowCommand::CycleViews) => {
-                    self.views.cycle();
+                    let mut view = self.store.get::<u8>("view").unwrap_or(0);
+                    view = (view + 1) % 2;
+                    self.store.set::<u8>("view", &view);
                 },
             }
 
@@ -175,17 +157,31 @@ impl Game {
 
         let mut game = Game::new(width, height, &args);
 
-        game.shared_data.views.push(render_view!(DebugView));
-        game.shared_data.views.push(render_view!(GameView));
-
+        // game view
         game.rendering.push(Box::new(|game, ctx| {
             if game.dirty {
-                ctx.set_active_console(0);
-                ctx.cls();
-                game.map.render(ctx, game.views.get_current_view());
+                let mut view = game.store.get::<u8>("view").unwrap_or(0);
+                if view == 0 {
+                    ctx.set_active_console(0);
+                    ctx.cls();
+                    game.map.render(ctx, &GameView {});
+                }
             }
         }));
 
+        // debug view
+        game.rendering.push(Box::new(|game, ctx| {
+            if game.dirty {
+                let mut view = game.store.get::<u8>("view").unwrap_or(0);
+                if view == 1 {
+                    ctx.set_active_console(0);
+                    ctx.cls();
+                    game.map.render(ctx, &DebugView {});
+                }
+            }
+        }));
+
+        // gui
         game.rendering.push(Box::new(|game, ctx| {
             ctx.set_active_console(1);
             ctx.cls();
@@ -200,5 +196,25 @@ impl Game {
         game.shared_data.commands.push_back(GameCommand::Flow(FlowCommand::GenerateLevel));
 
         main_loop(term,game).unwrap();
+    }
+}
+
+impl GameState for Game {
+    fn tick(&mut self, ctx: &mut BTerm) {
+        self.shared_data.resolve_command_queue(ctx);
+
+        for drawing_func in self.rendering.iter() {
+            drawing_func(&mut self.shared_data, ctx);
+        }
+
+        self.shared_data.handle_input();
+        self.shared_data.dirty = false;
+
+        for holder in &self.shared_data.entities {
+            if let cell = holder.clone().as_ref() {
+                let mut entity = cell.borrow_mut();
+                entity.tick(&self.shared_data);
+            }
+        }
     }
 }

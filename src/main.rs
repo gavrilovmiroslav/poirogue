@@ -5,7 +5,6 @@ use structopt::*;
 
 mod rex;
 mod commands;
-mod render;
 mod rand_gen;
 mod geometry;
 mod game;
@@ -15,7 +14,6 @@ mod map;
 mod input;
 mod views;
 mod tiles;
-mod views_impl;
 mod readonly_archive_cave;
 mod opt;
 
