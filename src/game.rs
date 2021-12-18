@@ -26,8 +26,8 @@ use crate::opt::Opt;
 use crate::rand_gen::get_random_between;
 use crate::rex::draw_rex;
 use crate::tiles::MapTile;
-use crate::views::{View};
-use crate::views::*;
+use crate::render_view::{View};
+use crate::render_view::*;
 
 pub trait Entity
 {
@@ -63,13 +63,11 @@ impl GameSharedData {
             flow: GameFlow::Player,
             commands: VecDeque::default(),
             input: InputSnapshots::default(),
-            data: if args.release_mode {
-                println!("Loading data from binarized file...");
-                Box::new(ReadonlyArchiveCave::open("resources/data.bin"))
+            data: Box::new(if args.release_mode {
+                ReadonlyArchiveCave::open("resources/data.bin")
             } else {
-                println!("Loading data from resource folder...");
-                Box::new(FileCave::new(Path::new("resources/data")).unwrap())
-            },
+                FileCave::new(Path::new("resources/data")).unwrap()
+            }),
             entities: Vec::default(),
             store: PickleDb::new("", PickleDbDumpPolicy::NeverDump, SerializationMethod::Bin),
         }
@@ -108,9 +106,8 @@ impl GameSharedData {
                 GameCommand::Flow(FlowCommand::Exit) => ctx.quit(),
 
                 GameCommand::Flow(FlowCommand::CycleViews) => {
-                    let mut view = Views::from(self.store.get::<u8>("view").unwrap_or(0));
-                    view =  view.toggle();
-                    self.store.set::<u8>("view", &u8::from(view));
+                    let mut view = self.store.get::<RenderView>("view").unwrap_or(RenderView::Game);
+                    self.store.set::<RenderView>("view", &view.toggle());
                 },
             }
 
@@ -157,9 +154,9 @@ impl Game {
 
         let mut game = Game::new(width, height, &args);
 
-        fn render_map_if_dirty_and_view(view: &Views, game: &GameSharedData, ctx: &mut BTerm) {
+        fn render_map_if_dirty_and_view(view: &RenderView, game: &GameSharedData, ctx: &mut BTerm) {
             if game.dirty {
-                if *view == Views::from(game.store.get::<u8>("view").unwrap_or(0)) {
+                if *view == game.store.get::<RenderView>("view").unwrap_or(RenderView::Game) {
                     ctx.set_active_console(0);
                     ctx.cls();
                     game.map.render(ctx, view);
@@ -169,12 +166,12 @@ impl Game {
 
         // game view
         game.rendering.push(Box::new(|game, ctx| {
-            render_map_if_dirty_and_view(&Views::Game, game, ctx);
+            render_map_if_dirty_and_view(&RenderView::Game, game, ctx);
         }));
 
         // debug view
         game.rendering.push(Box::new(|game, ctx| {
-            render_map_if_dirty_and_view(&Views::Debug, game, ctx);
+            render_map_if_dirty_and_view(&RenderView::Debug, game, ctx);
         }));
 
         // gui

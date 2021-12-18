@@ -1,6 +1,6 @@
 use bracket_lib::prelude::*;
 use serde::de::{DeserializeOwned, Error};
-use serde::{Deserialize, Deserializer};
+use serde::{Serialize, Deserialize, Deserializer};
 use crate::game::Entity;
 use crate::rand_gen::get_random_between;
 use crate::tiles::{DebugMapTile, MapTile};
@@ -13,40 +13,40 @@ pub trait View
 }
 
 #[repr(u8)]
-#[derive(PartialEq)]
-pub enum Views {
+#[derive(PartialEq, Serialize, Deserialize)]
+pub enum RenderView {
     Game,
     Debug,
 }
 
-impl Views {
-    pub fn toggle(&self) -> Views {
+impl RenderView {
+    pub fn toggle(&self) -> RenderView {
         match &self {
-            Views::Debug => Views::Game,
-            Views::Game => Views::Debug
+            RenderView::Debug => RenderView::Game,
+            RenderView::Game => RenderView::Debug
         }
     }
 }
 
-impl From<u8> for Views {
+impl From<u8> for RenderView {
     fn from(n: u8) -> Self {
         match n {
-            0 => Views::Game,
-            _ => Views::Debug
+            0 => RenderView::Game,
+            _ => RenderView::Debug
         }
     }
 }
 
-impl From<Views> for u8 {
-    fn from(n: Views) -> Self {
+impl From<RenderView> for u8 {
+    fn from(n: RenderView) -> Self {
         match n {
-            Views::Game => 0,
-            Views::Debug => 1,
+            RenderView::Game => 0,
+            RenderView::Debug => 1,
         }
     }
 }
 
-impl View for Views {
+impl View for RenderView {
     fn get_description(&self, t: &MapTile) -> String {
         match t {
             MapTile::Debug(DebugMapTile::Construction(_)) => "!Construction",
@@ -65,7 +65,7 @@ impl View for Views {
         use DebugMapTile::*;
 
         match &self {
-            Views::Game => {
+            RenderView::Game => {
                 match t {
                     MapTile::Debug(_) => '!',
                     MapTile::Obscured => '#',
@@ -77,7 +77,7 @@ impl View for Views {
                 }
             }
 
-            Views::Debug => {
+            RenderView::Debug => {
                 match t {
                     MapTile::Debug(Construction(n)) => (64 + *n as u8) as char,
                     MapTile::Debug(RectCenter) => '*',

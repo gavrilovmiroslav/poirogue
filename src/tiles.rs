@@ -1,7 +1,7 @@
 use serde::{Serialize, Deserialize};
 use bracket_lib::prelude::{GREEN, MAGENTA, RED, RGB, WHITE};
 use crate::rand_gen::get_random_between;
-use crate::views::{View};
+use crate::render_view::{View};
 use strum_macros::Display;
 
 pub type TileIndex = usize;

@@ -7,7 +7,7 @@ use crate::commands::GameCommand;
 use crate::geometry::Glyph;
 use crate::rand_gen::get_random_between;
 use crate::tiles::{MapTile, TileIndex};
-use crate::views::{View};
+use crate::render_view::{View};
 
 #[derive(Default)]
 pub struct Map {
