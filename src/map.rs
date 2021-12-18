@@ -1,11 +1,8 @@
-use std::borrow::{Borrow, BorrowMut};
 use serde::{Serialize, Deserialize};
 use std::collections::{HashSet, VecDeque};
 use bracket_lib::prelude::*;
 use object_pool::Reusable;
 use crate::commands::GameCommand;
-use crate::geometry::Glyph;
-use crate::rand_gen::get_random_between;
 use crate::tiles::{MapTile, TileIndex};
 use crate::render_view::{View};
 

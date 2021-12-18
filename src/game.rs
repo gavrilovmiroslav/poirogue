@@ -1,4 +1,4 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::borrow::{Borrow};
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::fs;
@@ -63,11 +63,11 @@ impl GameSharedData {
             flow: GameFlow::Player,
             commands: VecDeque::default(),
             input: InputSnapshots::default(),
-            data: Box::new(if args.release_mode {
-                ReadonlyArchiveCave::open("resources/data.bin")
+            data: if args.release_mode {
+                Box::new(ReadonlyArchiveCave::open("resources/data.bin"))
             } else {
-                FileCave::new(Path::new("resources/data")).unwrap()
-            }),
+                Box::new(FileCave::new(Path::new("resources/data")).unwrap())
+            },
             entities: Vec::default(),
             store: PickleDb::new("", PickleDbDumpPolicy::NeverDump, SerializationMethod::Bin),
         }
@@ -106,8 +106,8 @@ impl GameSharedData {
                 GameCommand::Flow(FlowCommand::Exit) => ctx.quit(),
 
                 GameCommand::Flow(FlowCommand::CycleViews) => {
-                    let mut view = self.store.get::<RenderView>("view").unwrap_or(RenderView::Game);
-                    self.store.set::<RenderView>("view", &view.toggle());
+                    let view = self.store.get::<RenderView>("view").unwrap_or(RenderView::Game);
+                    self.store.set::<RenderView>("view", &view.toggle()).expect("Store entry for 'view' updated successfully");
                 },
             }
 

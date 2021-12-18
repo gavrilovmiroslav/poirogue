@@ -3,7 +3,6 @@ use std::hash::Hash;
 use bit_set::BitSet;
 use bracket_lib::prelude::VirtualKeyCode;
 use bracket_terminal::prelude::Input;
-use std::marker::PhantomData;
 
 #[derive(Default)]
 pub struct InputSnapshotState {

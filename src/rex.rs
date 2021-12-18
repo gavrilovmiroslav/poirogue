@@ -18,13 +18,12 @@ fn dig_from_cave(data: &dyn Cave, name: &'static str) -> XpFile {
 }
 
 pub fn draw_rex(game: &mut GameSharedData, ctx: &mut BTerm, name: &'static str, x: i32, y: i32) {
-    if let mut lru = LRU.lock().unwrap() {
-        if !lru.contains(&name) {
-            let rex = dig_from_cave(game.data.borrow(), name);
-            ctx.render_xp_sprite(&rex, x, y);
-            lru.put(name, rex);
-        } else {
-            ctx.render_xp_sprite(lru.get(&name).unwrap(), x, y);
-        }
+    let mut lru = LRU.lock().unwrap();
+    if !lru.contains(&name) {
+        let rex = dig_from_cave(game.data.borrow(), name);
+        ctx.render_xp_sprite(&rex, x, y);
+        lru.put(name, rex);
+    } else {
+        ctx.render_xp_sprite(lru.get(&name).unwrap(), x, y);
     }
 }

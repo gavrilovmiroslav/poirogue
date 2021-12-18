@@ -4,7 +4,6 @@ use caves::Cave;
 use caves::res::Res;
 use filearco::v1::FileArco;
 use lru::{DefaultHasher, LruCache};
-use lazy_static::*;
 
 pub struct ReadonlyArchiveCave {
     archive: FileArco,
@@ -14,11 +13,11 @@ impl ReadonlyArchiveCave {
     pub fn make_from(dir: &str, output: &str) {
         let data_path = Path::new(dir);
         let output_path = Path::new(output);
-        remove_file(output_path).ok().unwrap();
+        remove_file(output_path).expect("Old binarized file archive removed successfully");
 
         let output = File::create(output_path).unwrap();
         let file_data = filearco::get_file_data(data_path).ok().unwrap();
-        FileArco::make(file_data, output);
+        FileArco::make(file_data, output).expect("Binarized file archive created successfully");
     }
 
     pub fn open(path: &'static str) -> ReadonlyArchiveCave {
