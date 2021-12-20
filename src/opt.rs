@@ -9,4 +9,6 @@ pub struct Opt {
     pub release_mode: bool,
     #[structopt(short = "b", long)]
     pub skip_binarize_on_boot: bool,
+    #[structopt(short = "d", long, default_value = "resources/data")]
+    pub data_directory: String,
 }

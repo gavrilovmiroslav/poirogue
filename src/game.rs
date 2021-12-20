@@ -29,8 +29,7 @@ use crate::tiles::MapTile;
 use crate::render_view::{View};
 use crate::render_view::*;
 
-pub trait Entity
-{
+pub trait Entity {
     fn tick(&mut self, data: &GameSharedData);
 }
 
@@ -64,9 +63,9 @@ impl GameSharedData {
             commands: VecDeque::default(),
             input: InputSnapshots::default(),
             data: if args.release_mode {
-                Box::new(ReadonlyArchiveCave::open("resources/data.bin"))
+                Box::new(ReadonlyArchiveCave::open(format!("{}.bin", args.data_directory)))
             } else {
-                Box::new(FileCave::new(Path::new("resources/data")).unwrap())
+                Box::new(FileCave::new(Path::new(args.data_directory.as_str())).unwrap())
             },
             entities: Vec::default(),
             store: PickleDb::new("", PickleDbDumpPolicy::NeverDump, SerializationMethod::Bin),

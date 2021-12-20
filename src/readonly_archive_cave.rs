@@ -20,8 +20,8 @@ impl ReadonlyArchiveCave {
         FileArco::make(file_data, output).expect("Binarized file archive created successfully");
     }
 
-    pub fn open(path: &'static str) -> ReadonlyArchiveCave {
-        let archive = FileArco::new(path).unwrap();
+    pub fn open(path: String) -> ReadonlyArchiveCave {
+        let archive = FileArco::new(path.as_str()).unwrap();
         ReadonlyArchiveCave { archive }
     }
 }
