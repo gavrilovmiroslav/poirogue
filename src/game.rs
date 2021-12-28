@@ -22,22 +22,20 @@ use crate::input::{InputSnapshotState, InputSnapshot, KeyboardSnapshot, InputSna
 use crate::map_gen::run_map_gen;
 use crate::murder_gen::generate_murder;
 use crate::{rand_gen};
+use crate::entity::Entity;
 use crate::opt::Opt;
+use crate::player::Player;
 use crate::rand_gen::get_random_between;
 use crate::rex::draw_rex;
 use crate::tiles::MapTile;
 use crate::render_view::{View};
 use crate::render_view::*;
 
-pub trait Entity {
-    fn tick(&mut self, data: &GameSharedData);
-}
-
 pub type RenderingPassFn = Box<dyn Fn(&mut GameSharedData, &mut BTerm)>;
 
 pub struct Game {
     pub shared_data: GameSharedData,
-    pub rendering: Vec<RenderingPassFn>,
+    pub render_pipeline: Vec<RenderingPassFn>,
 }
 
 pub struct GameSharedData {
@@ -48,7 +46,8 @@ pub struct GameSharedData {
     pub commands: VecDeque<GameCommand>,
     pub input: InputSnapshots,
     pub data: Box<dyn Cave>,
-    pub entities: Vec<Rc<RefCell<dyn Entity>>>,
+    pub player: Player,
+    pub entities: Vec<Rc<RefCell<dyn Entity<GameSharedData>>>>,
     pub store: PickleDb,
 }
 
@@ -67,6 +66,7 @@ impl GameSharedData {
             } else {
                 Box::new(FileCave::new(Path::new(args.data_directory.as_str())).unwrap())
             },
+            player: Player::default(),
             entities: Vec::default(),
             store: PickleDb::new("", PickleDbDumpPolicy::NeverDump, SerializationMethod::Bin),
         }
@@ -118,7 +118,7 @@ impl GameSharedData {
 impl Game {
     pub fn new(w: i32, h: i32, args: &Opt) -> Game {
         Game {
-            rendering: Vec::new(),
+            render_pipeline: Vec::new(),
             shared_data: GameSharedData::new(w, h, args)
         }
     }
@@ -164,17 +164,17 @@ impl Game {
         }
 
         // game view
-        game.rendering.push(Box::new(|game, ctx| {
+        game.render_pipeline.push(Box::new(|game, ctx| {
             render_map_if_dirty_and_view(&RenderView::Game, game, ctx);
         }));
 
         // debug view
-        game.rendering.push(Box::new(|game, ctx| {
+        game.render_pipeline.push(Box::new(|game, ctx| {
             render_map_if_dirty_and_view(&RenderView::Debug, game, ctx);
         }));
 
         // gui
-        game.rendering.push(Box::new(|game, ctx| {
+        game.render_pipeline.push(Box::new(|game, ctx| {
             ctx.set_active_console(1);
             ctx.cls();
             let pos = ctx.mouse_pos();
@@ -195,7 +195,7 @@ impl GameState for Game {
     fn tick(&mut self, ctx: &mut BTerm) {
         self.shared_data.resolve_command_queue(ctx);
 
-        for drawing_func in self.rendering.iter() {
+        for drawing_func in self.render_pipeline.iter() {
             drawing_func(&mut self.shared_data, ctx);
         }
 

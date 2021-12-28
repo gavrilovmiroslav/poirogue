@@ -7,7 +7,7 @@ use std::ops::{Add, Range, Sub};
 use multimap::MultiMap;
 use urlencoding::encode;
 use crate::map::Map;
-use crate::tiles::{DebugMapTile, RectIndex, RoomIndex, TileIndex, MapTile};
+use crate::tiles::{DebugMapTile, RectIndex, RoomIndex, TileIndex, MapTile, DoorState};
 
 pub struct RectGenConfig {
     pub creation_attempts: i32,
@@ -89,10 +89,10 @@ pub fn flood_fill_construction_into_floor(map: &mut Map, storage: &mut MapGenSto
     if x < 0 || y < 0 || x > map.width || y > map.height { return; }
 
     if let Some(tile_index) = map.get_tile_index(x, y) {
-        if let MapTile::Debug(DebugMapTile::Construction(old_room_index)) = &map.tiles[tile_index] {
+        if let MapTile::Debug(DebugMapTile::Construction(old_room_index)) = &map.get_tile_at(tile_index) {
             let rect_index = storage.lookup_rect_by_tile_index.get(&tile_index).unwrap();
 
-            map.tiles[tile_index] = MapTile::Floor(fill_room_index);
+            map.set_at_tile_index(tile_index, MapTile::Floor(fill_room_index));
             *storage.room_index_by_rect_index.get_mut(*rect_index).unwrap() = fill_room_index;
 
             insert_rect_to_room(storage, *rect_index, fill_room_index);
@@ -110,10 +110,10 @@ pub fn glue_rects_into_rooms(map: &mut Map, storage: &mut MapGenStorage) {
     for i in 1..map.width - 1 {
         for j in 1..map.height - 1 {
             let tile = map.get_tile_index(i, j).unwrap();
-            if let MapTile::Debug(DebugMapTile::Construction(old_room_index)) = map.tiles[tile] {
-                storage.room_index_by_rect_index[old_room_index] = room_index;
+            if let MapTile::Debug(DebugMapTile::Construction(old_room_index)) = map.get_tile_at(tile) {
+                storage.room_index_by_rect_index[*old_room_index] = room_index;
 
-                insert_rect_to_room(storage, old_room_index, room_index);
+                insert_rect_to_room(storage, *old_room_index, room_index);
 
                 flood_fill_construction_into_floor(map, storage, i, j, room_index);
                 room_index += 1;
@@ -147,9 +147,11 @@ pub fn link_neighbors(map: &mut Map, storage: &mut MapGenStorage) {
             let hor = axis == Dir::LeftRight;
 
             move |map: &Map, p: Point| {
-                let prev_tile = map.point2d_to_index(if hor { Point::new(p.x, p.y - 1) } else { Point::new(p.x - 1, p.y) });
-                let next_tile = map.point2d_to_index(if hor { Point::new(p.x, p.y + 1) } else { Point::new(p.x + 1, p.y) });
-                map.tiles[prev_tile] == MapTile::Obscured && map.tiles[next_tile] == MapTile::Obscured
+                let prev_tile_index = map.point2d_to_index(if hor { Point::new(p.x, p.y - 1) } else { Point::new(p.x - 1, p.y) });
+                let next_tile_index = map.point2d_to_index(if hor { Point::new(p.x, p.y + 1) } else { Point::new(p.x + 1, p.y) });
+                let prev_tile = map.get_tile_at(prev_tile_index);
+                let next_tile = map.get_tile_at(next_tile_index);
+                prev_tile.is_obscured() && next_tile.is_obscured()
             }
         };
 
@@ -200,7 +202,7 @@ pub fn link_neighbors(map: &mut Map, storage: &mut MapGenStorage) {
 
                 for i in 0..len {
                     let tile = path[i];
-                    map.tiles[tile] = MapTile::Corridor;
+                    map.set_at_tile_index(tile, MapTile::Corridor);
                     if checker(map, map.index_to_point2d(tile)) {
                         door_candidates.push(tile);
                     }
@@ -208,7 +210,7 @@ pub fn link_neighbors(map: &mut Map, storage: &mut MapGenStorage) {
 
                 if !door_candidates.is_empty() {
                     let door = door_candidates[get_random_between(0, door_candidates.len())];
-                    map.tiles[door] = MapTile::Door;
+                    map.set_at_tile_index(door, MapTile::Door(DoorState::Closed));
                     storage.door_tiles.push(door);
                 }
             }
@@ -250,12 +252,13 @@ pub fn remove_weird_doors(map: &mut Map, storage: &mut MapGenStorage) {
     fn is_corridor_or_door(map: &Map, pt: Point) -> bool {
         let tile = map.point2d_to_index(pt);
         map.is_tile(tile, MapTile::Corridor) ||
-            map.is_tile(tile, MapTile::Door)
+            map.is_tile(tile, MapTile::Door(DoorState::Closed)) ||
+            map.is_tile(tile, MapTile::Door(DoorState::Open))
     }
 
     fn is_room(map: &Map, pt: Point) -> bool {
         let tile = map.point2d_to_index(pt);
-        let is_room = if let MapTile::Floor(_) = map.tiles[tile] { true } else { false };
+        let is_room = if let MapTile::Floor(_) = map.get_tile_at(tile) { true } else { false };
         is_room
     }
 
@@ -274,7 +277,7 @@ pub fn remove_weird_doors(map: &mut Map, storage: &mut MapGenStorage) {
                 }
 
                 if count[0] != 0 && count[1] != 0 {
-                    map.tiles[door] = MapTile::Corridor;
+                    map.set_at_tile_index(door, MapTile::Corridor);
                 }
             }
         }
@@ -288,7 +291,7 @@ pub fn remove_weird_doors(map: &mut Map, storage: &mut MapGenStorage) {
                 let neighs = neighbors(pt);
                 for (n, axis) in neighs {
                     if !map.in_bounds(n) {
-                        map.tiles[door] = MapTile::Corridor;
+                        map.set_at_tile_index(door, MapTile::Corridor);
                         done = true;
                         break;
                     }
@@ -299,7 +302,7 @@ pub fn remove_weird_doors(map: &mut Map, storage: &mut MapGenStorage) {
 
                 if check_door_between_two_rooms(map, neighbors, Dir::LeftRight) ||
                     check_door_between_two_rooms(map, neighbors, Dir::UpDown) {
-                    map.tiles[door] = MapTile::Corridor;
+                    map.set_at_tile_index(door, MapTile::Corridor);
                 }
             }
         }

@@ -1,7 +1,7 @@
 use bracket_lib::prelude::*;
 use serde::{Serialize, Deserialize};
 use crate::rand_gen::get_random_between;
-use crate::tiles::{DebugMapTile, MapTile};
+use crate::tiles::{DebugMapTile, DoorState, MapTile};
 
 pub trait View
 {
@@ -54,7 +54,7 @@ impl View for RenderView {
             MapTile::Floor(_) => "Room",
             MapTile::Stairs => "Stairs",
             MapTile::Corridor => "Corridor",
-            MapTile::Door => "Door",
+            MapTile::Door(_) => "Door",
             MapTile::Wall => "Wall",
         }.to_string()
     }
@@ -69,7 +69,8 @@ impl View for RenderView {
                     MapTile::Obscured => '#',
                     MapTile::Floor(n) => '.',
                     MapTile::Corridor => '.',
-                    MapTile::Door => '+',
+                    MapTile::Door(DoorState::Closed) => '+',
+                    MapTile::Door(DoorState::Open) => '-',
                     MapTile::Stairs => '>',
                     MapTile::Wall => '#'
                 }
@@ -83,7 +84,8 @@ impl View for RenderView {
                     MapTile::Obscured => ' ',
                     MapTile::Floor(n) => (64 + *n as u8) as char,
                     MapTile::Corridor => '-',
-                    MapTile::Door => '+',
+                    MapTile::Door(DoorState::Closed) => '+',
+                    MapTile::Door(DoorState::Open) => '-',
                     MapTile::Stairs => '>',
                     MapTile::Wall => '#'
                 }

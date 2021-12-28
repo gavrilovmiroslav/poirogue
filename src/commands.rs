@@ -1,3 +1,4 @@
+use serde::{Serialize, Deserialize};
 
 #[derive(PartialEq, Serialize, Deserialize)]
 pub enum FlowCommand {

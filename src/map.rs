@@ -10,16 +10,12 @@ use crate::render_view::{View};
 pub struct Map {
     pub width: i32,
     pub height: i32,
-    pub tiles: Vec<MapTile>,
-    pub visible: Vec<bool>, // !is_transparent
-    pub blocked: Vec<bool>, // !is_walkable
-    pub revealed: Vec<bool>,
+    tiles: Vec<MapTile>,
+    revealed: Vec<bool>,
+    visible: Vec<bool>,
 }
 
 impl Map {
-
-    // HELPER FUNCTIONS
-
     fn is_valid_tile(&self, x:i32, y:i32) -> bool {
         x >= 0 && x < self.width && y >= 0 && y < self.height
     }
@@ -29,6 +25,10 @@ impl Map {
         if self.is_valid_tile(p.x, p.y) {
             self.tiles[tile] == tile_kind
         } else { false }
+    }
+
+    pub fn get_tile_at(&self, tile_index: TileIndex) -> &MapTile {
+        &self.tiles[tile_index]
     }
 
     pub fn get_tile_index_from_point(&self, p: Point) -> Option<usize> {
@@ -55,29 +55,28 @@ impl Map {
         Point{ x: index as i32 % self.width, y: index as i32 / self.width }
     }
 
-    // MAIN FUNCTIONS
 
     pub fn new(w: i32, h: i32) -> Self {
-        let mut tiles = Vec::new();
-        let mut visible = Vec::new();
-        let mut revealed = Vec::new();
-        let mut blocked = Vec::new();
+        let size = (w * h) as usize;
+        let mut tiles = Vec::with_capacity(size);
+        let mut revealed = Vec::with_capacity(size);
+        let mut visible = Vec::with_capacity(size);
 
-        for _i in 0 .. (w * h) {
+        for _ in 0..size {
             tiles.push(MapTile::default());
-            visible.push(true);
-            revealed.push(true);
-            blocked.push(true);
+            revealed.push(false);
+            visible.push(false);
         }
 
-        Map { width: w, height: h, tiles, visible, revealed, blocked }
+        Map { width: w, height: h, tiles, revealed, visible }
     }
 
-    pub fn is_tile_transparent_xy(&self, x: i32, y: i32) -> bool {
-        match self.get_tile_index(x, y) {
-            Some(index) => self.tiles[index].is_transparent(),
-            None => false
-        }
+    pub fn is_tile_blocked(&self, tile_index: TileIndex) -> bool {
+        self.tiles[tile_index].is_blocking()
+    }
+
+    pub fn is_tile_revealed(&self, tile_index: TileIndex) -> bool {
+        self.revealed[tile_index]
     }
 
     pub fn is_exit_valid(&self, x:i32, y:i32) -> bool {
@@ -86,18 +85,20 @@ impl Map {
         }
 
         let index = self.get_tile_index(x, y).unwrap();
+        !self.is_tile_blocked(index) && self.is_tile_revealed(index)
+    }
 
-        !self.blocked[index] && self.revealed[index]
+    pub fn set_at_tile_index(&mut self, tile_index: TileIndex, t: MapTile) {
+        self.tiles[tile_index] = t.clone();
+        self.revealed[tile_index] = true;
+        self.visible[tile_index] = true;
     }
 
     pub fn set(&mut self, x: i32, y: i32, t: MapTile) {
-        match self.get_tile_index(x, y) {
-            Some(index) => {
-                self.tiles[index] = t.clone();
-                self.blocked[index] = false; // !t.is_walkable();
-                self.visible[index] = true; // !t.is_transparent();
-            },
-            None => ()
+        if let Some(index) = self.get_tile_index(x, y) {
+            self.tiles[index] = t.clone();
+            self.revealed[index] = true;
+            self.visible[index] = true;
         }
     }
 }
@@ -127,13 +128,8 @@ impl Map {
 
 impl BaseMap for Map {
     fn is_opaque(&self, index: usize) -> bool {
-        let (x, y) = self.get_tile_coords(index);
-
-        if !self.is_tile_transparent_xy(x, y) { return true; }
-
-        return false;
+        self.is_tile_blocked(index)
     }
-
 
     fn get_available_exits(&self, index: usize) -> SmallVec<[(usize, f32); 10]> {
         let mut exits : SmallVec<[(usize, f32); 10]> = SmallVec::new();
