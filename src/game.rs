@@ -17,14 +17,12 @@ use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use crate::map::Map;
 use crate::readonly_archive_cave::ReadonlyArchiveCave;
 use crate::commands::{FlowCommand, GameCommand, GameFlow};
-use crate::geometry::Glyph;
 use crate::input::{InputSnapshotState, InputSnapshot, KeyboardSnapshot, InputSnapshots};
 use crate::map_gen::run_map_gen;
 use crate::murder_gen::generate_murder;
 use crate::{rand_gen};
-use crate::entity::Entity;
+use crate::entity::{AbstractEntity, Entity};
 use crate::opt::Opt;
-use crate::player::Player;
 use crate::rand_gen::get_random_between;
 use crate::rex::draw_rex;
 use crate::tiles::MapTile;
@@ -32,6 +30,7 @@ use crate::render_view::{View};
 use crate::render_view::*;
 
 pub type RenderingPassFn = Box<dyn Fn(&mut GameSharedData, &mut BTerm)>;
+pub type Store = PickleDb;
 
 pub struct Game {
     pub shared_data: GameSharedData,
@@ -46,14 +45,12 @@ pub struct GameSharedData {
     pub commands: VecDeque<GameCommand>,
     pub input: InputSnapshots,
     pub data: Box<dyn Cave>,
-    pub player: Player,
-    pub entities: Vec<Rc<RefCell<dyn Entity<GameSharedData>>>>,
-    pub store: PickleDb,
+    pub entities: Vec<Rc<RefCell<dyn AbstractEntity<Data = GameSharedData>>>>,
+    pub store: Store,
 }
 
 impl GameSharedData {
     pub fn new(w: i32, h: i32, args: &Opt) -> GameSharedData {
-
         GameSharedData {
             dirty: true,
             size: (w, h),
@@ -66,13 +63,12 @@ impl GameSharedData {
             } else {
                 Box::new(FileCave::new(Path::new(args.data_directory.as_str())).unwrap())
             },
-            player: Player::default(),
             entities: Vec::default(),
             store: PickleDb::new("", PickleDbDumpPolicy::NeverDump, SerializationMethod::Bin),
         }
     }
 
-    pub fn handle_input(&mut self) {
+    pub fn collect_inputs(&mut self) {
         fn handle_editor_input(game: &mut GameSharedData) {
             if game.input.keyboard.is_released(VirtualKeyCode::Escape) {
                 game.commands.push_back(GameCommand::Flow(FlowCommand::Exit));
@@ -91,15 +87,29 @@ impl GameSharedData {
             }
         }
 
-        self.input.update(INPUT.lock().borrow());
+        self.input.make_new_snapshots(INPUT.lock().borrow());
         handle_editor_input(self);
+    }
+
+    fn create_new_level(&mut self) {
+        let (map, storage) = run_map_gen(self.size.0, self.size.1);
+        self.map = map;
+
+        self.entities.clear();
+        let player = Entity::make_player(storage.rects[0].center());
+        self.entities.push(player);
+
+        for i in 1..10 {
+            let character = Entity::make_character(storage.rects[i].center(), 'K');
+            self.entities.push(character);
+        }
     }
 
     fn resolve_command_queue(&mut self, ctx: &mut BTerm) {
         while let Some(comm) = self.commands.pop_front() {
             match comm {
                 GameCommand::Flow(FlowCommand::GenerateLevel) => {
-                    self.map = run_map_gen(self.size.0, self.size.1);
+                    self.create_new_level()
                 },
 
                 GameCommand::Flow(FlowCommand::Exit) => ctx.quit(),
@@ -160,6 +170,18 @@ impl Game {
                     ctx.cls();
                     game.map.render(ctx, view);
                 }
+
+                for holder in &game.entities {
+                    if let cell = holder.clone().as_ref() {
+                        let entity = cell.borrow();
+                        let pos = entity.get_position();
+                        let glyph = entity.get_glyph();
+
+                        if game.map.is_tile_revealed(game.map.point2d_to_index(pos)) {
+                            ctx.print_color(pos.x, pos.y, glyph.fg, glyph.bg, glyph.ch);
+                        }
+                    }
+                }
             }
         }
 
@@ -175,11 +197,6 @@ impl Game {
 
         // gui
         game.render_pipeline.push(Box::new(|game, ctx| {
-            ctx.set_active_console(1);
-            ctx.cls();
-            let pos = ctx.mouse_pos();
-            draw_rex(game, ctx,"skull", pos.0 + 2, pos.1 + 2);
-
             ctx.set_active_console(2);
             ctx.cls();
             ctx.print_color(1, 1, RGB::named(WHITE), RGB::named(BLACK), format!("FPS: {}", ctx.fps));
@@ -199,13 +216,21 @@ impl GameState for Game {
             drawing_func(&mut self.shared_data, ctx);
         }
 
-        self.shared_data.handle_input();
-        self.shared_data.dirty = false;
+        self.shared_data.collect_inputs();
 
         for holder in &self.shared_data.entities {
             if let cell = holder.clone().as_ref() {
                 let mut entity = cell.borrow_mut();
                 entity.tick(&self.shared_data);
+
+                if entity.is_player() && entity.is_dirty() {
+                    let mut map = &mut self.shared_data.map;
+
+                    map.hide();
+                    map.show(entity.get_fov().iter());
+
+                    self.shared_data.dirty = true;
+                }
             }
         }
     }

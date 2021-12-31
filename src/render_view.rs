@@ -8,6 +8,7 @@ pub trait View
     fn get_description(&self, t: &MapTile) -> String;
     fn get_glyph(&self, t: &MapTile) -> char;
     fn get_color(&self, t: &MapTile) -> RGB;
+    fn get_see_all(&self) -> bool;
 }
 
 #[repr(u8)]
@@ -98,10 +99,17 @@ impl View for RenderView {
             MapTile::Debug(DebugMapTile::Construction(_)) => RGB::named(GREEN),
             MapTile::Debug(DebugMapTile::RectCenter) => RGB::named(RED),
             MapTile::Obscured => {
-                let color = get_random_between(0.05, 0.1);
+                let color = get_random_between(0.45, 0.5);
                 RGB::from_f32(color, color, color)
             },
             _ => RGB::named(WHITE),
+        }
+    }
+
+    fn get_see_all(&self) -> bool {
+        match self {
+            RenderView::Game => false,
+            RenderView::Debug => true,
         }
     }
 }

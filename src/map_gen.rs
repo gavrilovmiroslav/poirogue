@@ -312,7 +312,7 @@ pub fn remove_weird_doors(map: &mut Map, storage: &mut MapGenStorage) {
     remove_doors_if_crowded(map, storage);
 }
 
-pub fn run_map_gen(w: i32, h: i32) -> Map {
+pub fn run_map_gen(w: i32, h: i32) -> (Map, MapGenStorage) {
     let mut map = Map::new(w, h);
     let mut storage = MapGenStorage::default();
 
@@ -325,5 +325,5 @@ pub fn run_map_gen(w: i32, h: i32) -> Map {
     link_neighbors(&mut map, &mut storage);
     remove_weird_doors(&mut map, &mut storage);
 
-    map
+    (map, storage)
 }

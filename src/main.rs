@@ -6,7 +6,6 @@ use structopt::*;
 mod rex;
 mod commands;
 mod rand_gen;
-mod geometry;
 mod game;
 mod murder_gen;
 mod map_gen;
@@ -16,7 +15,6 @@ mod render_view;
 mod tiles;
 mod readonly_archive_cave;
 mod opt;
-mod player;
 mod entity;
 
 embedded_resource!(TILE_FONT, "../resources/classic_roguelike_white.png");

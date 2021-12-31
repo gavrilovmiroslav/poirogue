@@ -1,5 +1,6 @@
 use serde::{Serialize, Deserialize};
 use std::collections::{HashSet, VecDeque};
+use std::collections::hash_set::Iter;
 use bracket_lib::prelude::*;
 use object_pool::Reusable;
 use crate::commands::GameCommand;
@@ -10,9 +11,9 @@ use crate::render_view::{View};
 pub struct Map {
     pub width: i32,
     pub height: i32,
-    tiles: Vec<MapTile>,
-    revealed: Vec<bool>,
-    visible: Vec<bool>,
+    pub visible: Vec<bool>,
+    pub revealed: Vec<bool>,
+    pub tiles: Vec<MapTile>,
 }
 
 impl Map {
@@ -90,15 +91,29 @@ impl Map {
 
     pub fn set_at_tile_index(&mut self, tile_index: TileIndex, t: MapTile) {
         self.tiles[tile_index] = t.clone();
-        self.revealed[tile_index] = true;
-        self.visible[tile_index] = true;
+        self.revealed[tile_index] = false;
+        self.visible[tile_index] = false;
     }
 
     pub fn set(&mut self, x: i32, y: i32, t: MapTile) {
         if let Some(index) = self.get_tile_index(x, y) {
             self.tiles[index] = t.clone();
-            self.revealed[index] = true;
+            self.revealed[index] = false;
+            self.visible[index] = false;
+        }
+    }
+
+    pub fn hide(&mut self) {
+        for i in self.visible.iter_mut() {
+            *i = false;
+        }
+    }
+
+    pub fn show(&mut self, vis: Iter<Point>) {
+        for i in vis {
+            let index = self.point2d_to_index(*i);
             self.visible[index] = true;
+            self.revealed[index] = true;
         }
     }
 }
@@ -109,15 +124,27 @@ impl Map {
 
         let mut batch = DrawBatch::new();
 
-        for y in 0 .. self.height {
-            for x in 0 .. self.width {
-                let tile = &self.tiles[index];
-
-                if self.revealed[index] {
-                    let color = if !self.visible[index] { view.get_color(tile) } else { RGB::named(GREY) };
-                    batch.print_color(Point::new(x, y), view.get_glyph(tile), ColorPair::new(color, RGB::named(BLACK)));
+        if view.get_see_all() {
+            for y in 0 .. self.height {
+                for x in 0 .. self.width {
+                    let tile = &self.tiles[index];
+                    let glyph = view.get_glyph(tile);
+                    let color = if self.visible[index] { view.get_color(tile) } else { RGB::named(DARK_GREEN) };
+                    batch.print_color(Point::new(x, y), glyph, ColorPair::new(color, RGB::named(BLACK)));
+                    index += 1;
                 }
-                index += 1;
+            }
+        } else {
+            for y in 0..self.height {
+                for x in 0..self.width {
+                    let tile = &self.tiles[index];
+
+                    if self.revealed[index] && self.visible[index] {
+                        let color = if self.visible[index] { view.get_color(tile) } else { RGB::named(LIGHT_GREY) };
+                        batch.print_color(Point::new(x, y), view.get_glyph(tile), ColorPair::new(color, RGB::named(BLACK)));
+                    }
+                    index += 1;
+                }
             }
         }
 

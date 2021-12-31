@@ -280,7 +280,7 @@ pub struct InputSnapshots {
 }
 
 impl InputSnapshots {
-    pub fn update(&mut self, input: &Input) {
+    pub fn make_new_snapshots(&mut self, input: &Input) {
         self.keyboard.update(input);
         self.mouse.update(input);
     }
