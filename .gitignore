@@ -11,5 +11,3 @@ Cargo.lock
 .idea
 .idea/*
 .idea/**/*
-/resources/data/debug.view.json
-/resources/data/game.view.json

@@ -1,0 +1,47 @@
+{
+  "debug_construction": {
+    "ch": null,
+    "fg": null,
+    "bg": null
+  },
+  "debug_rect_center": {
+    "ch": null,
+    "fg": null,
+    "bg": null
+  },
+  "obscured": {
+    "ch": null,
+    "fg": null,
+    "bg": null
+  },
+  "floor": {
+    "ch": null,
+    "fg": null,
+    "bg": null
+  },
+  "stairs": {
+    "ch": null,
+    "fg": null,
+    "bg": null
+  },
+  "corridor": {
+    "ch": null,
+    "fg": null,
+    "bg": null
+  },
+  "door_opened": {
+    "ch": null,
+    "fg": null,
+    "bg": null
+  },
+  "door_closed": {
+    "ch": null,
+    "fg": null,
+    "bg": null
+  },
+  "wall": {
+    "ch": null,
+    "fg": null,
+    "bg": null
+  }
+}
