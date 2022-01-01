@@ -9,6 +9,12 @@ pub enum FlowCommand {
 }
 
 #[derive(PartialEq, Serialize, Deserialize)]
+pub enum HackCommand {
+    UnlockAllDoors,
+    LockAllDoors
+}
+
+#[derive(PartialEq, Serialize, Deserialize)]
 pub enum GameFlow {
     Player,
     World,
@@ -17,4 +23,5 @@ pub enum GameFlow {
 #[derive(PartialEq, Serialize, Deserialize)]
 pub enum GameCommand {
     Flow(FlowCommand),
+    Hack(HackCommand),
 }

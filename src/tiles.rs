@@ -12,6 +12,15 @@ pub enum DoorState {
     Closed, Open,
 }
 
+impl DoorState {
+    pub fn toggle(&self) -> DoorState {
+        match self {
+            DoorState::Closed => DoorState::Open,
+            DoorState::Open => DoorState::Closed
+        }
+    }
+}
+
 #[derive(Eq, Serialize, Deserialize, PartialEq, Clone, Debug, Display, Hash)]
 pub enum DebugMapTile {
     Construction(usize),

@@ -18,7 +18,7 @@ use serde::{de, Serialize};
 
 use crate::map::Map;
 use crate::readonly_archive_cave::ReadonlyArchiveCave;
-use crate::commands::{FlowCommand, GameCommand, GameFlow};
+use crate::commands::{FlowCommand, GameCommand, GameFlow, HackCommand};
 use crate::input::{InputSnapshotState, InputSnapshot, KeyboardSnapshot, InputSnapshots};
 use crate::map_gen::run_map_gen;
 use crate::murder_gen::generate_murder;
@@ -27,7 +27,7 @@ use crate::entity::{AbstractEntity, Entity};
 use crate::opt::Opt;
 use crate::rand_gen::get_random_between;
 use crate::rex::draw_rex;
-use crate::tiles::{MapTile, MapTileRep};
+use crate::tiles::{DoorState, MapTile, MapTileRep};
 use crate::render_view::{View};
 use crate::render_view::*;
 
@@ -105,7 +105,7 @@ impl GameSharedData {
         where T: ?Sized + Serialize {
 
         if let Ok(json) = serde_json::to_string_pretty(value) {
-            self.data.set(name, &json.as_bytes().to_vec());
+            self.data.set(name, &json.as_bytes().to_vec()).unwrap();
         }
     }
 
@@ -120,12 +120,20 @@ impl GameSharedData {
                 game.commands.push_back(GameCommand::Flow(FlowCommand::GenerateLevel));
             }
 
-            if game.input.mouse.is_pressed(0) {
-                game.commands.push_back(GameCommand::Flow(FlowCommand::GenerateLevel));
-            }
-
             if game.input.keyboard.is_pressed(VirtualKeyCode::Tab) {
                 game.commands.push_back(GameCommand::Flow(FlowCommand::CycleViews));
+            }
+
+            if game.input.keyboard.is_pressed(VirtualKeyCode::F2) {
+                game.commands.push_back(GameCommand::Hack(HackCommand::UnlockAllDoors));
+            }
+
+            if game.input.keyboard.is_pressed(VirtualKeyCode::F3) {
+                game.commands.push_back(GameCommand::Hack(HackCommand::LockAllDoors));
+            }
+
+            if game.input.keyboard.is_pressed(VirtualKeyCode::F4) {
+                game.commands.push_back(GameCommand::Flow(FlowCommand::GenerateLevel));
             }
 
             if game.input.keyboard.is_pressed(VirtualKeyCode::F5) {
@@ -168,6 +176,14 @@ impl GameSharedData {
                 GameCommand::Flow(FlowCommand::CycleViews) => {
                     let view = self.store.get::<RenderView>("view").unwrap_or(RenderView::Game);
                     self.store.set::<RenderView>("view", &view.toggle()).expect("Store entry for 'view' updated successfully");
+                },
+
+                GameCommand::Hack(HackCommand::UnlockAllDoors) => {
+                    self.map.iter_all_doors(&Map::open);
+                },
+
+                GameCommand::Hack(HackCommand::LockAllDoors) => {
+                    self.map.iter_all_doors(&Map::close);
                 },
             }
 

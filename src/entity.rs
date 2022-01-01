@@ -151,7 +151,7 @@ impl AbstractEntity for Entity {
 
 pub fn tick_player(transform: &mut Transform, data: &GameSharedData) -> bool {
     let old_position = transform.position;
-    transform.fov = field_of_view_set(transform.position, 16, &data.map);
+    transform.fov = field_of_view_set(transform.position, 32, &data.map);
     true
 }
 

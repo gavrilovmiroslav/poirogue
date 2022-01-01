@@ -4,8 +4,9 @@ use std::collections::hash_set::Iter;
 use bracket_lib::prelude::*;
 use object_pool::Reusable;
 use crate::commands::GameCommand;
-use crate::tiles::{MapTile, TileIndex};
+use crate::tiles::{DoorState, MapTile, TileIndex};
 use crate::render_view::{View};
+use crate::tiles::DoorState::Open;
 
 #[derive(Default)]
 pub struct Map {
@@ -150,6 +151,26 @@ impl Map {
 
         batch.submit(0).unwrap();
         render_draw_buffer(ctx).unwrap();
+    }
+
+    pub fn iter_all_doors(&mut self, change: &dyn Fn(&DoorState) -> DoorState) {
+        for i in &mut self.tiles {
+            if let MapTile::Door(state) = i {
+                *i = MapTile::Door(change(state));
+            }
+        }
+    }
+
+    pub fn toggle(state: &DoorState) -> DoorState {
+        state.toggle()
+    }
+
+    pub fn close(_state: &DoorState) -> DoorState {
+        DoorState::Closed
+    }
+
+    pub fn open(_state: &DoorState) -> DoorState {
+        DoorState::Open
     }
 }
 
