@@ -119,7 +119,7 @@ impl Map {
 }
 
 impl Map {
-    pub fn render(&self, ctx: &mut BTerm, view: &dyn View) {
+    pub fn render(&self, ctx: &mut BTerm, view: &dyn View<MapTile>) {
         let mut index: usize = 0;
 
         let mut batch = DrawBatch::new();

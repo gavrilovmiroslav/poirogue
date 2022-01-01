@@ -1,3 +1,4 @@
+use std::str;
 use std::borrow::{Borrow};
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -13,6 +14,7 @@ use object_pool::{Pool, Reusable};
 use planck_ecs::{Dispatcher, DispatcherBuilder, World};
 use lazy_static::*;
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
+use serde::{de, Serialize};
 
 use crate::map::Map;
 use crate::readonly_archive_cave::ReadonlyArchiveCave;
@@ -25,7 +27,7 @@ use crate::entity::{AbstractEntity, Entity};
 use crate::opt::Opt;
 use crate::rand_gen::get_random_between;
 use crate::rex::draw_rex;
-use crate::tiles::MapTile;
+use crate::tiles::{MapTile, MapTileRep};
 use crate::render_view::{View};
 use crate::render_view::*;
 
@@ -68,6 +70,46 @@ impl GameSharedData {
         }
     }
 
+    pub fn register_render_view(&self, view: RenderView) {
+        fn view_to_file(view: &RenderView) -> &str {
+            match view {
+                RenderView::Game => "game.view.json",
+                RenderView::Debug => "debug.view.json",
+            }
+        }
+
+        let filename = view_to_file(&view);
+        let rep = if let Some(json) = self.get_json::<MapTileRep>(filename) {
+            json
+        } else {
+            self.set_json(filename, &MapTileRep::default());
+            MapTileRep::default()
+        };
+
+        add_render_view_rep(view, rep);
+    }
+
+    pub fn get_json<T>(&self, name: &str) -> Option<T>
+    where for <'a> T: de::Deserialize<'a> {
+        if let Ok(binary_data) = self.data.get(name) {
+            if let Ok(string_data) = str::from_utf8(&binary_data) {
+                let json_as_struct = serde_json::from_str::<T>(string_data).unwrap();
+                return Some(json_as_struct)
+            }
+        }
+
+        return None;
+    }
+
+    pub fn set_json<T>(&self, name: &str, value: &T)
+        where T: ?Sized + Serialize {
+
+        if let Ok(json) = serde_json::to_string_pretty(value) {
+            self.data.set(name, &json.as_bytes().to_vec());
+        }
+    }
+
+
     pub fn collect_inputs(&mut self) {
         fn handle_editor_input(game: &mut GameSharedData) {
             if game.input.keyboard.is_released(VirtualKeyCode::Escape) {
@@ -84,6 +126,10 @@ impl GameSharedData {
 
             if game.input.keyboard.is_pressed(VirtualKeyCode::Tab) {
                 game.commands.push_back(GameCommand::Flow(FlowCommand::CycleViews));
+            }
+
+            if game.input.keyboard.is_pressed(VirtualKeyCode::F5) {
+                game.commands.push_back(GameCommand::Flow(FlowCommand::ReloadViewConfigs));
             }
         }
 
@@ -110,6 +156,11 @@ impl GameSharedData {
             match comm {
                 GameCommand::Flow(FlowCommand::GenerateLevel) => {
                     self.create_new_level()
+                },
+
+                GameCommand::Flow(FlowCommand::ReloadViewConfigs) => {
+                    self.register_render_view(RenderView::Game);
+                    self.register_render_view(RenderView::Debug);
                 },
 
                 GameCommand::Flow(FlowCommand::Exit) => ctx.quit(),
@@ -159,7 +210,7 @@ impl Game {
             .with_sparse_console(width, height, "8x8glyphs.png")
             .with_tile_dimensions(16,16)
 
-            .build().unwrap();
+            .build().expect("Couldn't build the terminal window");
 
         let mut game = Game::new(width, height, &args);
 
@@ -178,7 +229,7 @@ impl Game {
                         let glyph = entity.get_glyph();
 
                         if game.map.is_tile_revealed(game.map.point2d_to_index(pos)) {
-                            ctx.print_color(pos.x, pos.y, glyph.fg, glyph.bg, glyph.ch);
+                            ctx.print_color(pos.x, pos.y, RGB::from(glyph.fg), RGB::from(glyph.bg), glyph.ch);
                         }
                     }
                 }
@@ -202,6 +253,7 @@ impl Game {
             ctx.print_color(1, 1, RGB::named(WHITE), RGB::named(BLACK), format!("FPS: {}", ctx.fps));
         }));
 
+        game.shared_data.commands.push_back(GameCommand::Flow(FlowCommand::ReloadViewConfigs));
         game.shared_data.commands.push_back(GameCommand::Flow(FlowCommand::GenerateLevel));
 
         main_loop(term,game).unwrap();

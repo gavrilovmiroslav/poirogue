@@ -1,23 +1,15 @@
+use serde::{Serialize, Deserialize};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::ops::AddAssign;
 use std::rc::Rc;
-use bracket_lib::prelude::{Algorithm2D, BLACK, field_of_view_set, Point, RGB, WHITE};
+use bracket_color::prelude::{RGB, BLACK, WHITE};
+use bracket_lib::prelude::{Algorithm2D, field_of_view_set, Point};
+use crate::entity::Entity::{Character, Player};
+use crate::game::GameSharedData;
+use crate::glyph::{Glyph};
 
 pub type InMut<T> = Rc<RefCell<T>>;
-
-#[derive(PartialEq, Copy, Clone, Debug)]
-pub struct Glyph {
-    pub ch: char,
-    pub fg: RGB,
-    pub bg: RGB,
-}
-
-impl Glyph {
-    pub fn new(ch: char) -> Glyph {
-        Glyph { ch, fg: RGB::named(WHITE), bg: RGB::named(BLACK) }
-    }
-}
 
 pub trait AbstractEntity {
     type Data;
@@ -75,9 +67,6 @@ impl Entity {
         })))
     }
 }
-
-use crate::entity::Entity::{Character, Player};
-use crate::game::GameSharedData;
 
 impl Entity {
     pub fn inner_mut(&mut self) -> &mut Transform {

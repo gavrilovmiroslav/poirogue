@@ -15,6 +15,7 @@ mod render_view;
 mod tiles;
 mod readonly_archive_cave;
 mod opt;
+mod glyph;
 mod entity;
 
 embedded_resource!(TILE_FONT, "../resources/classic_roguelike_white.png");

@@ -4,6 +4,7 @@ use serde::{Serialize, Deserialize};
 pub enum FlowCommand {
     CycleViews,
     GenerateLevel,
+    ReloadViewConfigs,
     Exit
 }
 
