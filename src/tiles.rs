@@ -1,7 +1,9 @@
 use bracket_color::prelude::RGB;
 use serde::{Serialize, Deserialize};
 use strum_macros::Display;
+use crate::colors::Color;
 use crate::glyph::{Glyph, GlyphOpt};
+use crate::render_view::Colorable;
 
 pub type TileIndex = usize;
 pub type RectIndex = usize;
@@ -35,7 +37,6 @@ pub enum MapTile {
     Stairs,
     Corridor,
     Door(DoorState),
-    Wall
 }
 
 #[repr(C, packed)]
@@ -49,7 +50,6 @@ pub struct MapTileRep {
     pub corridor: GlyphOpt,
     pub door_opened: GlyphOpt,
     pub door_closed: GlyphOpt,
-    pub wall: GlyphOpt,
 }
 
 impl Default for MapTileRep {
@@ -63,7 +63,6 @@ impl Default for MapTileRep {
             corridor: GlyphOpt::new('.'),
             door_opened: GlyphOpt::new('_'),
             door_closed: GlyphOpt::new('+'),
-            wall: GlyphOpt::new('#'),
         }
     }
 }
@@ -79,7 +78,6 @@ impl MapTile {
         match &self {
             MapTile::Debug(_) => true,
             MapTile::Obscured => true,
-            MapTile::Wall => true,
             MapTile::Door(DoorState::Closed) => true,
             _ => false
         }
@@ -107,6 +105,5 @@ pub fn get_from_rep(s: &MapTile, p: &MapTileRep) -> GlyphOpt {
         Corridor => p.corridor,
         Door(Closed) => p.door_closed,
         Door(Open) => p.door_opened,
-        Wall => p.wall
     }
 }

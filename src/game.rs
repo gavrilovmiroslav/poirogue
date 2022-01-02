@@ -1,5 +1,5 @@
 use std::str;
-use std::borrow::{Borrow};
+use std::borrow::{Borrow, BorrowMut};
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::fs;
@@ -18,11 +18,12 @@ use serde::{de, Serialize};
 
 use crate::map::Map;
 use crate::readonly_archive_cave::ReadonlyArchiveCave;
-use crate::commands::{FlowCommand, GameCommand, GameFlow, HackCommand};
+use crate::commands::{ActionCommand, FlowCommand, GameCommand, GameFlow, HackCommand};
 use crate::input::{InputSnapshotState, InputSnapshot, KeyboardSnapshot, InputSnapshots};
 use crate::map_gen::run_map_gen;
 use crate::murder_gen::generate_murder;
 use crate::{rand_gen};
+use crate::colors::named_color;
 use crate::entity::{AbstractEntity, Entity};
 use crate::opt::Opt;
 use crate::rand_gen::get_random_between;
@@ -152,11 +153,6 @@ impl GameSharedData {
         self.entities.clear();
         let player = Entity::make_player(storage.rects[0].center());
         self.entities.push(player);
-
-        for i in 1..10 {
-            let character = Entity::make_character(storage.rects[i].center(), 'K');
-            self.entities.push(character);
-        }
     }
 
     fn resolve_command_queue(&mut self, ctx: &mut BTerm) {
@@ -185,6 +181,8 @@ impl GameSharedData {
                 GameCommand::Hack(HackCommand::LockAllDoors) => {
                     self.map.iter_all_doors(&Map::close);
                 },
+
+                _ => {}
             }
 
             self.dirty = true;
@@ -230,12 +228,27 @@ impl Game {
 
         let mut game = Game::new(width, height, &args);
 
+        let mut noise = Vec::with_capacity((width * height) as usize);
+        for i in 0..width * height {
+            noise.push(get_random_between(0.0f32, 1.0f32));
+        }
+
+        { /* FOV */
+            let fov = 32;
+            game.shared_data.store.set("fov", &fov);
+        }
+
+        {
+            /* NOISE MAP */
+            game.shared_data.store.set("noise_map", &noise);
+        }
+
         fn render_map_if_dirty_and_view(view: &RenderView, game: &GameSharedData, ctx: &mut BTerm) {
             if game.dirty {
                 if *view == game.store.get::<RenderView>("view").unwrap_or(RenderView::Game) {
                     ctx.set_active_console(0);
                     ctx.cls();
-                    game.map.render(ctx, view);
+                    game.map.render(ctx, view, &game.store);
                 }
 
                 for holder in &game.entities {
@@ -243,8 +256,9 @@ impl Game {
                         let entity = cell.borrow();
                         let pos = entity.get_position();
                         let glyph = entity.get_glyph();
+                        let index = game.map.point2d_to_index(pos);
 
-                        if game.map.is_tile_revealed(game.map.point2d_to_index(pos)) {
+                        if game.map.is_tile_revealed(index) && game.map.visible[index] {
                             ctx.print_color(pos.x, pos.y, RGB::from(glyph.fg), RGB::from(glyph.bg), glyph.ch);
                         }
                     }
@@ -266,7 +280,7 @@ impl Game {
         game.render_pipeline.push(Box::new(|game, ctx| {
             ctx.set_active_console(2);
             ctx.cls();
-            ctx.print_color(1, 1, RGB::named(WHITE), RGB::named(BLACK), format!("FPS: {}", ctx.fps));
+            ctx.print_color(1, 1, named_color(WHITE), named_color(BLACK), format!("FPS: {}", ctx.fps));
         }));
 
         game.shared_data.commands.push_back(GameCommand::Flow(FlowCommand::ReloadViewConfigs));
@@ -278,6 +292,12 @@ impl Game {
 
 impl GameState for Game {
     fn tick(&mut self, ctx: &mut BTerm) {
+        { /* TIME */
+            let mut time = self.shared_data.store.get::<f32>("time").unwrap_or(0.0);
+            time += 0.03;
+            self.shared_data.store.set::<f32>("time", &time);
+        }
+
         self.shared_data.resolve_command_queue(ctx);
 
         for drawing_func in self.render_pipeline.iter() {
@@ -288,16 +308,46 @@ impl GameState for Game {
 
         for holder in &self.shared_data.entities {
             if let cell = holder.clone().as_ref() {
-                let mut entity = cell.borrow_mut();
-                entity.tick(&self.shared_data);
+                let changes = cell.borrow().tick(&self.shared_data);
 
-                if entity.is_player() && entity.is_dirty() {
-                    let mut map = &mut self.shared_data.map;
+                for change in changes {
+                    match change {
+                        ActionCommand::MoveBy(dx, dy) => {
+                            let mut e = cell.borrow_mut();
+                            let new_pos = e.inner().position + Point::new(dx, dy);
+                            let map = &self.shared_data.map;
+                            let index = map.point2d_to_index(new_pos);
+                            if !map.is_tile_blocked(index) {
+                                e.inner_mut().position = new_pos;
+                            } else {
+                                if let MapTile::Door(DoorState::Closed) = map.tiles[index] {
+                                    self.shared_data.map.set(new_pos.x, new_pos.y, MapTile::Door(DoorState::Open));
+                                }
+                            }
+                        },
 
-                    map.hide();
-                    map.show(entity.get_fov().iter());
+                        ActionCommand::MoveTo(x, y) => {
+                            let mut e = cell.borrow_mut();
+                            e.inner_mut().position.x = x;
+                            e.inner_mut().position.y = y;
+                        }
 
-                    self.shared_data.dirty = true;
+                        ActionCommand::FovChange(fov) => {
+                            let mut map = &mut self.shared_data.map;
+
+                            map.hide();
+                            map.show(fov);
+                        }
+                    }
+                }
+
+                {
+                    let entity = cell.borrow();
+                    if entity.is_player() {
+                        let pt = entity.get_position();
+                        let p = (pt.x, pt.y);
+                        self.shared_data.store.set("player_position", &p);
+                    }
                 }
             }
         }

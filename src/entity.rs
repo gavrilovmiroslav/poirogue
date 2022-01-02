@@ -1,36 +1,33 @@
+use std::borrow::Borrow;
 use serde::{Serialize, Deserialize};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::ops::AddAssign;
 use std::rc::Rc;
 use bracket_color::prelude::{RGB, BLACK, WHITE};
-use bracket_lib::prelude::{Algorithm2D, field_of_view_set, Point};
+use bracket_lib::prelude::{Algorithm2D, field_of_view_set, Point, VirtualKeyCode};
+use crate::colors::named_color;
+use crate::commands::ActionCommand;
 use crate::entity::Entity::{Character, Player};
 use crate::game::GameSharedData;
 use crate::glyph::{Glyph};
+use crate::input::InputSnapshot;
 
 pub type InMut<T> = Rc<RefCell<T>>;
 
 pub trait AbstractEntity {
     type Data;
 
-    fn move_by(&mut self, dist: Point);
-    fn move_to(&mut self, dist: Point);
-    fn get_position(&self) -> Point;
+    fn inner_mut(&mut self) -> &mut Transform;
+    fn inner(&self) -> &Transform;
 
-    fn set_glyph(&mut self, glyph: Glyph);
-    fn set_glyph_ch(&mut self, ch: char);
-    fn set_glyph_fg(&mut self, fg: RGB);
-    fn set_glyph_bg(&mut self, bg: RGB);
+    fn get_position(&self) -> Point;
     fn get_glyph(&self) -> Glyph;
 
     fn get_fov(&self) -> HashSet<Point>;
 
     fn is_player(&self) -> bool;
-    fn is_dirty(&self) -> bool;
-    fn mark_dirty(&mut self);
-
-    fn tick(&mut self, data: &Self::Data);
+    fn tick(&self, data: &Self::Data) -> Vec<ActionCommand>;
 }
 
 pub struct Transform {
@@ -40,7 +37,7 @@ pub struct Transform {
 }
 
 pub enum Entity {
-    Player(Transform, bool),
+    Player(Transform),
     Character(Transform),
 }
 
@@ -50,10 +47,10 @@ impl Entity {
             position: pos,
             glyph: Glyph {
                 ch: '@',
-                fg: RGB::named(WHITE),
-                bg: RGB::named(BLACK) },
-            fov: HashSet::default()
-        }, true)))
+                fg: named_color(WHITE),
+                bg: named_color(BLACK) },
+            fov: HashSet::default(),
+        })))
     }
 
     pub fn make_character(pos: Point, ch: char) -> InMut<Entity> {
@@ -61,98 +58,69 @@ impl Entity {
             position: pos,
             glyph: Glyph {
                 ch,
-                fg: RGB::named(WHITE),
-                bg: RGB::named(BLACK) },
-            fov: HashSet::default()
+                fg: named_color(WHITE),
+                bg: named_color(BLACK) },
+            fov: HashSet::default(),
         })))
-    }
-}
-
-impl Entity {
-    pub fn inner_mut(&mut self) -> &mut Transform {
-        match self {
-            Player(t, _) => t,
-            Character(t) => t,
-        }
-    }
-
-    pub fn inner(&self) -> &Transform {
-        match self {
-            Player(t, _) => t,
-            Character(t) => t,
-        }
     }
 }
 
 impl AbstractEntity for Entity {
     type Data = GameSharedData;
 
-    fn move_by(&mut self, dp: Point) {
-        self.inner_mut().position.add_assign(dp)
+    fn inner_mut(&mut self) -> &mut Transform {
+        match self {
+            Player(t) => t,
+            Character(t) => t,
+        }
     }
 
-    fn move_to(&mut self, p: Point) {
-        self.inner_mut().position = p;
+    fn inner(&self) -> &Transform {
+        match self {
+            Player(t) => t,
+            Character(t) => t,
+        }
     }
 
     fn get_position(&self) -> Point {
         self.inner().position
     }
-
-    fn set_glyph(&mut self, glyph: Glyph) {
-        self.inner_mut().glyph = glyph;
-    }
-
-    fn set_glyph_ch(&mut self, ch: char) {
-        self.inner_mut().glyph.ch = ch;
-    }
-
-    fn set_glyph_fg(&mut self, fg: RGB) {
-        self.inner_mut().glyph.fg = fg;
-    }
-
-    fn set_glyph_bg(&mut self, bg: RGB) {
-        self.inner_mut().glyph.bg = bg;
-    }
-
     fn get_glyph(&self) -> Glyph {
         self.inner().glyph
     }
-
     fn get_fov(&self) -> HashSet<Point> {
         self.inner().fov.clone()
     }
 
     fn is_player(&self) -> bool {
-        if let Player(_, _) = self { true } else { false }
+        if let Player(_) = self { true } else { false }
     }
 
-    fn is_dirty(&self) -> bool {
-        match *self {
-            Player(_, dirty) => dirty,
-            _ => false,
-        }
-    }
+    fn tick(&self, data: &Self::Data) -> Vec<ActionCommand> {
+        let mut result = Vec::new();
 
-    fn mark_dirty(&mut self) {
-        if let Player(_, dirty) = self {
-            *dirty = true;
-        }
-    }
+        if self.is_player() {
+            let fov = field_of_view_set(self.get_position(), data.store.get("fov").unwrap_or(16), &data.map)
+                .iter().map(|p| (p.x, p.y)).collect();
+            result.push(ActionCommand::FovChange(fov));
 
-    fn tick(&mut self, data: &Self::Data) {
-        match self {
-            Player(transform, dirty) if *dirty => *dirty = tick_player(transform, data),
-            Character(transform) => tick_character(transform, data),
-            _ => {},
+            if data.input.keyboard.is_pressed_or_held_with_mod(VirtualKeyCode::Up, VirtualKeyCode::LShift) {
+                result.push(ActionCommand::MoveBy(0, -1));
+            }
+
+            if data.input.keyboard.is_pressed_or_held_with_mod(VirtualKeyCode::Down, VirtualKeyCode::LShift) {
+                result.push(ActionCommand::MoveBy(0, 1));
+            }
+
+            if data.input.keyboard.is_pressed_or_held_with_mod(VirtualKeyCode::Left, VirtualKeyCode::LShift) {
+                result.push(ActionCommand::MoveBy(-1, 0));
+            }
+
+            if data.input.keyboard.is_pressed_or_held_with_mod(VirtualKeyCode::Right, VirtualKeyCode::LShift) {
+                result.push(ActionCommand::MoveBy(1, 0));
+            }
         }
+
+        result
     }
 }
-
-pub fn tick_player(transform: &mut Transform, data: &GameSharedData) -> bool {
-    let old_position = transform.position;
-    transform.fov = field_of_view_set(transform.position, 32, &data.map);
-    true
-}
-
-pub fn tick_character(transform: &mut Transform, data: &GameSharedData) {}

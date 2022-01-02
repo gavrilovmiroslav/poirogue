@@ -1,12 +1,23 @@
 use serde::{Serialize, Deserialize};
 use std::collections::{HashSet, VecDeque};
 use std::collections::hash_set::Iter;
+use std::ops::Mul;
 use bracket_lib::prelude::*;
 use object_pool::Reusable;
 use crate::commands::GameCommand;
 use crate::tiles::{DoorState, MapTile, TileIndex};
 use crate::render_view::{View};
 use crate::tiles::DoorState::Open;
+use lru::{LruCache};
+use lazy_static::*;
+use std::sync::Mutex;
+use crate::colors::{Color, named_color, ColorShifter};
+use crate::game::Store;
+use crate::rand_gen::get_random_between;
+
+lazy_static! {
+    static ref VISIBLE_MEMORY: Mutex<LruCache<TileIndex, u8>> = Mutex::new(LruCache::new(64));
+}
 
 #[derive(Default)]
 pub struct Map {
@@ -110,9 +121,9 @@ impl Map {
         }
     }
 
-    pub fn show(&mut self, vis: Iter<Point>) {
-        for i in vis {
-            let index = self.point2d_to_index(*i);
+    pub fn show(&mut self, vis: Vec<(i32, i32)>) {
+        for (x, y) in vis {
+            let index = self.point2d_to_index(Point::new(x, y));
             self.visible[index] = true;
             self.revealed[index] = true;
         }
@@ -120,7 +131,7 @@ impl Map {
 }
 
 impl Map {
-    pub fn render(&self, ctx: &mut BTerm, view: &dyn View<MapTile>) {
+    pub fn render(&self, ctx: &mut BTerm, view: &dyn View, store: &Store) {
         let mut index: usize = 0;
 
         let mut batch = DrawBatch::new();
@@ -130,19 +141,45 @@ impl Map {
                 for x in 0 .. self.width {
                     let tile = &self.tiles[index];
                     let glyph = view.get_glyph(tile);
-                    let color = if self.visible[index] { view.get_color(tile) } else { RGB::named(DARK_GREEN) };
-                    batch.print_color(Point::new(x, y), glyph, ColorPair::new(color, RGB::named(BLACK)));
+                    let color = if self.visible[index] { view.get_color(tile) } else { named_color(DARK_GREEN) };
+                    batch.print_color(Point::new(x, y), glyph, ColorPair::new(color, named_color(BLACK)));
                     index += 1;
                 }
             }
         } else {
+            let noise = store.get::<Vec<f32>>("noise_map").unwrap();
+            let (xp, yp) = store.get::<(i32, i32)>("player_position").unwrap_or((0, 0));
+
             for y in 0..self.height {
                 for x in 0..self.width {
                     let tile = &self.tiles[index];
 
-                    if self.revealed[index] && self.visible[index] {
-                        let color = if self.visible[index] { view.get_color(tile) } else { RGB::named(LIGHT_GREY) };
-                        batch.print_color(Point::new(x, y), view.get_glyph(tile), ColorPair::new(color, RGB::named(BLACK)));
+                    if self.revealed[index] {
+                        let dist = ({
+                            let dx = (xp - x) as f32;
+                            let dy = (yp - y) as f32;
+                            dx * dx + dy * dy
+                        } / 100.0).clamp(0.0, 1.0) * 0.25;
+
+                        let time = store.get::<f32>("time").unwrap_or(0.0);
+
+                        let speed = 0.5 + noise[index];
+                        let norm = f32::sin(time * speed) + 1.0;                              // 0 .. 1
+                        let sin = (0.2 + norm * 0.2).clamp(0.2, 0.3);                    // 0.2 .. 0.4
+
+                        batch.print_color(Point::new(x, y), view.get_glyph(tile),
+                                          ColorPair::new(if self.visible[index] {
+                                              view.get_color(tile)
+                                                  .hue_shift(f32::sin((time + noise[index]) * 0.01) + 1.0)
+                                                  .darken(dist * 1.5)
+                                                  .lighten(sin * 0.5)
+                                                  .desaturate(-dist * 1.5)
+                                          } else {
+                                              view.get_color(tile)
+                                                  .darken(sin)
+                                                  .darken(dist)
+                                                  .desaturate(-dist * 2.0)
+                                          }, named_color(BLACK)));
                     }
                     index += 1;
                 }

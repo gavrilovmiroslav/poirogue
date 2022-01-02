@@ -33,6 +33,11 @@ pub trait InputSnapshot {
         self.get_snapshot().released.contains(Self::key_to_usize(&key))
     }
 
+    fn is_pressed_or_held_with_mod(&self, key: Self::Input, mod_key: Self::Input) -> bool {
+        let key_clone = key.clone();
+        self.is_pressed(key) || (self.is_held(mod_key) && self.is_held(key_clone))
+    }
+
     fn update(&mut self, input: &Input) {
         let snapshot = self.get_snapshot_mut();
         snapshot.pressed.clear();

@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use bracket_lib::prelude::*;
+use std::ops::Mul;
 use serde::{Serialize, Deserialize};
 use serde::ser::{Serializer, SerializeMap};
 use crate::rand_gen::get_random_between;
@@ -7,17 +7,24 @@ use crate::tiles::{DebugMapTile, DoorState, get_from_rep, MapTile, MapTileRep};
 use lru::{DefaultHasher, LruCache};
 use lazy_static::*;
 use std::sync::Mutex;
+use bracket_color::prelude::{BLACK, DARK_CYAN, DARK_GRAY, GREEN, RED, WHITE};
+use crate::colors::{Color, ColorShifter, named_color};
 use crate::game::GameSharedData;
 
 lazy_static! {
     static ref VIEW_REP_LRU: Mutex<LruCache<RenderView, MapTileRep>> = Mutex::new(LruCache::new(2));
 }
 
-pub trait View<Tile>
+pub trait Colorable {
+    fn get_color(&self) -> Color;
+}
+
+pub trait View
 {
-    fn get_description(&self, t: &Tile) -> String;
-    fn get_glyph(&self, t: &Tile) -> char;
-    fn get_color(&self, t: &Tile) -> RGB;
+    fn get_description(&self, t: &MapTile) -> String;
+    fn get_glyph(&self, t: &MapTile) -> char;
+    fn get_color(&self, t: &MapTile) -> Color;
+    fn get_memory_color(&self, t: &MapTile) -> Color;
     fn get_see_all(&self) -> bool;
 }
 
@@ -61,7 +68,7 @@ impl From<RenderView> for u8 {
     }
 }
 
-impl View<MapTile> for RenderView {
+impl View for RenderView {
     fn get_description(&self, t: &MapTile) -> String {
         match t {
             MapTile::Debug(DebugMapTile::Construction(_)) => "!Construction",
@@ -71,7 +78,6 @@ impl View<MapTile> for RenderView {
             MapTile::Stairs => "Stairs",
             MapTile::Corridor => "Corridor",
             MapTile::Door(_) => "Door",
-            MapTile::Wall => "Wall",
         }.to_string()
     }
 
@@ -92,7 +98,7 @@ impl View<MapTile> for RenderView {
             RenderView::Game => {
                 match t {
                     MapTile::Debug(_) => '!',
-                    MapTile::Obscured | MapTile::Wall => '#',
+                    MapTile::Obscured => '#',
                     MapTile::Floor(_) | MapTile::Corridor => '.',
                     MapTile::Door(DoorState::Closed) => '+',
                     MapTile::Door(DoorState::Open) => '-',
@@ -111,13 +117,12 @@ impl View<MapTile> for RenderView {
                     MapTile::Door(DoorState::Open) => '-',
                     MapTile::Corridor => '.',
                     MapTile::Stairs => '>',
-                    MapTile::Wall => '#'
                 }
             }
         }
     }
 
-    fn get_color(&self, t: &MapTile) -> RGB {
+    fn get_color(&self, t: &MapTile) -> Color {
         {
             let mut cache = VIEW_REP_LRU.lock().unwrap();
             if let Some(foo) = cache.get(self) {
@@ -129,15 +134,16 @@ impl View<MapTile> for RenderView {
         }
 
         match t {
-            MapTile::Debug(DebugMapTile::Construction(_)) => RGB::named(GREEN),
-            MapTile::Debug(DebugMapTile::RectCenter) => RGB::named(RED),
-            MapTile::Obscured => RGB::named(DARK_GRAY),
-            MapTile::Floor(_) | MapTile::Corridor => {
-                let get_value = || { get_random_between(0.25, 0.55) };
-                RGB::from_f32(get_value(), get_value(), get_value())
-            },
-            _ => RGB::named(WHITE),
+            MapTile::Debug(DebugMapTile::Construction(_)) => named_color(GREEN),
+            MapTile::Debug(DebugMapTile::RectCenter) => named_color(RED),
+            MapTile::Obscured => named_color(DARK_GRAY),
+            MapTile::Floor(_) | MapTile::Corridor => named_color(DARK_CYAN),
+            _ => named_color(WHITE),
         }
+    }
+
+    fn get_memory_color(&self, t: &MapTile) -> Color {
+        named_color(DARK_GRAY).darken(0.5)
     }
 
     fn get_see_all(&self) -> bool {

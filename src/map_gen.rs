@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use serde::{Serialize, Deserialize};
 use bracket_lib::prelude::{Algorithm2D, BaseMap, Bresenham, BresenhamCircle, DijkstraMap, line2d_bresenham, Point, RandomNumberGenerator, Rect, VectorLine};
 use crate::rand_gen::{get_random_between};
@@ -39,6 +40,7 @@ pub struct MapGenStorage {
     pub lookup_rect_by_tile_index: HashMap<TileIndex, RectIndex>,
     pub rects_in_room: MultiMap<RoomIndex, Rect>,
     pub door_tiles: Vec<TileIndex>,
+    pub room_tiles: MultiMap<RoomIndex, TileIndex>,
 }
 
 pub fn stamp_non_overlapping_rects(config: RectGenConfig, map: &mut Map, storage: &mut MapGenStorage) {

@@ -1,24 +1,25 @@
 use serde::{Serialize, Deserialize};
-use bracket_color::prelude::{WHITE, BLACK, RGB};
+use bracket_color::prelude::{WHITE, BLACK};
+use crate::colors::{Color, named_color};
 
 #[derive(Serialize, Deserialize, PartialEq, Clone, Copy, Debug)]
 pub struct Glyph {
     pub ch: char,
-    pub fg: RGB,
-    pub bg: RGB,
+    pub fg: Color,
+    pub bg: Color,
 }
 
 impl Glyph {
     pub fn new(ch: char) -> Glyph {
-        Glyph { ch, fg: RGB::named(WHITE), bg: RGB::named(BLACK) }
+        Glyph { ch, fg: named_color(WHITE), bg: named_color(BLACK) }
     }
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Clone, Copy, Debug)]
 pub struct GlyphOpt {
     pub ch: Option<char>,
-    pub fg: Option<RGB>,
-    pub bg: Option<RGB>,
+    pub fg: Option<Color>,
+    pub bg: Option<Color>,
 }
 
 impl GlyphOpt {
@@ -29,8 +30,8 @@ impl GlyphOpt {
     pub fn collect(&self) -> Glyph {
         Glyph {
             ch: self.ch.unwrap_or(' '),
-            fg: self.fg.unwrap_or(RGB::named(WHITE)),
-            bg: self.bg.unwrap_or(RGB::named(BLACK)),
+            fg: self.fg.unwrap_or(named_color(WHITE)),
+            bg: self.bg.unwrap_or(named_color(BLACK)),
         }
     }
 }
