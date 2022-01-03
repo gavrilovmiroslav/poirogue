@@ -1,7 +1,7 @@
 
 pub trait Event<E: ?Sized>: 'static {
-    fn is_bubbling(&self) -> bool;
-    fn stop_bubbling(&mut self);
+    fn is_propagating(&self) -> bool;
+    fn stop_propagation(&mut self);
 }
 
 pub struct BaseEvent {
@@ -15,11 +15,11 @@ impl BaseEvent{
 }
 
 impl Event<BaseEvent> for BaseEvent {
-    fn is_bubbling(&self) -> bool{
+    fn is_propagating(&self) -> bool{
         self.is_bubbling
     }
 
-    fn stop_bubbling(&mut self) {
+    fn stop_propagation(&mut self) {
         self.is_bubbling = false;
     }
 }
