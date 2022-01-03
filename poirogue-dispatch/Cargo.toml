@@ -1,9 +1,0 @@
-[package]
-name = "poirogue-dispatch"
-version = "0.1.0"
-
-[dependencies]
-lazy_static = "1.4.0"
-
-[lib]
-path = "src/lib.rs"

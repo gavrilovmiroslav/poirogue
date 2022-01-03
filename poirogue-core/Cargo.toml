@@ -7,8 +7,6 @@ edition = "2021"
 
 # Local
 
-poirogue-dispatch = { path = "../poirogue-dispatch" }
-
 # Remove ASAP
 rand = { version = "0.8.4", features = ["small_rng"] }
 rand_chacha = "0.3.1"
