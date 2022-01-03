@@ -9,7 +9,6 @@ use crate::event::Event;
 use crate::listener::EventListener;
 
 pub trait Dispatch<T: ?Sized, E: Event<T>> {
-
     fn get_dispatcher(&self) -> &Dispatcher<T, E>;
     fn get_dispatcher_mut(&mut self) -> &mut Dispatcher<T, E>;
 
