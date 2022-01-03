@@ -4,13 +4,12 @@ use std::rc::Rc;
 use std::vec::Vec;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
-use std::marker::PhantomData;
 use event::Event;
 use listener::EventListener;
 
-pub trait Dispatch<T: ?Sized, E: Event<T>> {
-    fn get_dispatcher(&self) -> &Dispatcher<T, E>;
-    fn get_dispatcher_mut(&mut self) -> &mut Dispatcher<T, E>;
+pub trait Dispatch<E: Event> {
+    fn get_dispatcher(&self) -> &Dispatcher<E>;
+    fn get_dispatcher_mut(&mut self) -> &mut Dispatcher<E>;
 
     fn dispatch(&self, event: &mut E) {
         let type_id = TypeId::of::<E>();
@@ -26,8 +25,8 @@ pub trait Dispatch<T: ?Sized, E: Event<T>> {
         }
     }
 
-    fn add_listener(&mut self, listener: EventListener<T, E>) -> Rc<EventListener<T, E>> {
-        let rc: Rc<EventListener<T, E>> = Rc::new(listener);
+    fn add_listener(&mut self, listener: EventListener<E>) -> Rc<EventListener<E>> {
+        let rc: Rc<EventListener<E>> = Rc::new(listener);
         let ret = rc.clone();
         let type_id = TypeId::of::<E>();
 
@@ -43,7 +42,7 @@ pub trait Dispatch<T: ?Sized, E: Event<T>> {
         ret
     }
 
-    fn remove_listener(&mut self, listener: Rc<EventListener<T, E>>) {
+    fn remove_listener(&mut self, listener: Rc<EventListener<E>>) {
         let type_id = TypeId::of::<E>();
 
         if let Entry::Occupied(mut o) = self.get_dispatcher_mut().listeners.entry(type_id) {
@@ -61,14 +60,13 @@ pub trait Dispatch<T: ?Sized, E: Event<T>> {
     }
 }
 
-pub struct Dispatcher<T: ?Sized, E: Event<T>> {
-    listeners: HashMap<TypeId, Vec<Rc<EventListener<T, E>>>>,
-    phantom: PhantomData<T>,
+pub struct Dispatcher<E: Event> {
+    listeners: HashMap<TypeId, Vec<Rc<EventListener<E>>>>,
 }
 
-impl<T: ?Sized, E: Event<T>> Dispatcher<T, E> {
-    pub fn new() -> Dispatcher<T, E> {
-        Dispatcher { listeners: HashMap::new(), phantom: PhantomData }
+impl<E: Event> Dispatcher<E> {
+    pub fn new() -> Dispatcher<E> {
+        Dispatcher { listeners: HashMap::new() }
     }
 
     pub fn has_listeners(&self) -> bool {
@@ -79,7 +77,7 @@ impl<T: ?Sized, E: Event<T>> Dispatcher<T, E> {
     }
 }
 
-impl<T: ?Sized, E: Event<T>> Dispatch<T, E> for Dispatcher<T, E> {
-    fn get_dispatcher(&self) -> &Dispatcher<T, E> { self }
-    fn get_dispatcher_mut(&mut self) -> &mut Dispatcher<T, E> { self }
+impl<E: Event> Dispatch<E> for Dispatcher<E> {
+    fn get_dispatcher(&self) -> &Dispatcher<E> { self }
+    fn get_dispatcher_mut(&mut self) -> &mut Dispatcher<E> { self }
 }

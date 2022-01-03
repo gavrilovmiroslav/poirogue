@@ -13,7 +13,7 @@ mod tests {
         blocked: bool,
     }
 
-    impl Event<StoppableTestEvent> for StoppableTestEvent {
+    impl Event for StoppableTestEvent {
         fn is_propagating(&self) -> bool { !self.blocked }
         fn stop_propagation(&mut self) { self.blocked = true; }
     }
@@ -36,7 +36,7 @@ mod tests {
         }
     }
 
-    impl Event<NoStopTestEvent> for NoStopTestEvent {
+    impl Event for NoStopTestEvent {
         fn is_propagating(&self) -> bool { true }
         fn stop_propagation(&mut self) {}
     }
