@@ -249,7 +249,7 @@ impl BaseMap for Map {
 
 impl Algorithm2D for Map {
     fn point2d_to_index(&self, pt : Point) -> usize {
-        self.get_tile_index(pt.x, pt.y).unwrap()
+        self.get_tile_index(pt.x, pt.y).unwrap_or(0)
     }
 
     fn index_to_point2d(&self, index: usize) -> Point {

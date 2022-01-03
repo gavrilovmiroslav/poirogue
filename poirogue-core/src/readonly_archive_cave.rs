@@ -13,7 +13,9 @@ impl ReadonlyArchiveCave {
     pub fn make_from(dir: &str, output: &str) {
         let data_path = Path::new(dir);
         let output_path = Path::new(output);
-        remove_file(output_path).expect("Old binarized file archive removed successfully");
+        if Path::exists(output_path) {
+            remove_file(output_path).expect("Old binarized file archive removed successfully");
+        }
 
         let output = File::create(output_path).unwrap();
         let file_data = filearco::get_file_data(data_path).ok().unwrap();

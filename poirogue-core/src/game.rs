@@ -13,7 +13,7 @@ use object_pool::{Pool, Reusable};
 use lazy_static::*;
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use serde::{de, Serialize};
-use shipyard::World;
+use shipyard::{Workload, WorkloadBuilder, World};
 
 use crate::map::Map;
 use crate::readonly_archive_cave::ReadonlyArchiveCave;
