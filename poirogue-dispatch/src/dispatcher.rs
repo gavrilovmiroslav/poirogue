@@ -10,13 +10,13 @@ use crate::listener::EventListener;
 
 pub trait Dispatch<T: ?Sized, E: Event<T>> {
 
-    fn get_events(&self) -> &Dispatcher<T, E>;
-    fn get_events_mut(&mut self) -> &mut Dispatcher<T, E>;
+    fn get_dispatcher(&self) -> &Dispatcher<T, E>;
+    fn get_dispatcher_mut(&mut self) -> &mut Dispatcher<T, E>;
 
     fn dispatch(&self, event: &mut E) {
         let type_id = TypeId::of::<E>();
 
-        if let Some(listeners) = self.get_events().listeners.get(&type_id) {
+        if let Some(listeners) = self.get_dispatcher().listeners.get(&type_id) {
             for l in listeners.iter() {
                 if event.is_propagating() {
                     l.apply(event);
@@ -31,7 +31,8 @@ pub trait Dispatch<T: ?Sized, E: Event<T>> {
         let rc: Rc<EventListener<T, E>> = Rc::new(listener);
         let ret = rc.clone();
         let type_id = TypeId::of::<E>();
-        match self.get_events_mut().listeners.entry(type_id) {
+
+        match self.get_dispatcher_mut().listeners.entry(type_id) {
             Entry::Occupied(mut o) => {
                 let el = o.get_mut();
                 el.push(rc);
@@ -46,7 +47,7 @@ pub trait Dispatch<T: ?Sized, E: Event<T>> {
     fn remove_listener(&mut self, listener: Rc<EventListener<T, E>>) {
         let type_id = TypeId::of::<E>();
 
-        if let Entry::Occupied(mut o) = self.get_events_mut().listeners.entry(type_id) {
+        if let Entry::Occupied(mut o) = self.get_dispatcher_mut().listeners.entry(type_id) {
             let listeners = o.get_mut();
             let mut idx: usize = 0;
             for l in listeners.iter() {
@@ -80,6 +81,6 @@ impl<T: ?Sized, E: Event<T>> Dispatcher<T, E> {
 }
 
 impl<T: ?Sized, E: Event<T>> Dispatch<T, E> for Dispatcher<T, E> {
-    fn get_events(&self) -> &Dispatcher<T, E> { self }
-    fn get_events_mut(&mut self) -> &mut Dispatcher<T, E> { self }
+    fn get_dispatcher(&self) -> &Dispatcher<T, E> { self }
+    fn get_dispatcher_mut(&mut self) -> &mut Dispatcher<T, E> { self }
 }
