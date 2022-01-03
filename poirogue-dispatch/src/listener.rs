@@ -1,5 +1,6 @@
+
 use std::marker::PhantomData;
-use crate::event::Event;
+use event::Event;
 
 pub struct EventListener<T: ?Sized, E: Event<T>> {
     callback: fn(event: &mut E),
@@ -27,7 +28,7 @@ impl<T: ?Sized, E: Event<T>> EventListener<T, E> {
 
 impl<T: ?Sized, E: Event<T>> PartialEq for EventListener<T, E> {
     fn eq(&self, other: &EventListener<T, E>) -> bool {
-        (self.callback as *const()) == (other.callback as *const())
+        (self.callback as *const ()) == (other.callback as *const ())
     }
 
     fn ne(&self, other: &EventListener<T, E>) -> bool {

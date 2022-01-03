@@ -1,12 +1,12 @@
+
 use std::any::TypeId;
 use std::rc::Rc;
 use std::vec::Vec;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::marker::PhantomData;
-
-use crate::event::Event;
-use crate::listener::EventListener;
+use event::Event;
+use listener::EventListener;
 
 pub trait Dispatch<T: ?Sized, E: Event<T>> {
     fn get_dispatcher(&self) -> &Dispatcher<T, E>;
@@ -67,8 +67,8 @@ pub struct Dispatcher<T: ?Sized, E: Event<T>> {
 }
 
 impl<T: ?Sized, E: Event<T>> Dispatcher<T, E> {
-    pub fn new () -> Dispatcher<T, E> {
-        Dispatcher{ listeners: HashMap::new(), phantom: PhantomData }
+    pub fn new() -> Dispatcher<T, E> {
+        Dispatcher { listeners: HashMap::new(), phantom: PhantomData }
     }
 
     pub fn has_listeners(&self) -> bool {

@@ -3,7 +3,7 @@
 mod tests {
     use std::sync::Mutex;
     use dispatcher::{Dispatch, Dispatcher};
-    use event::Event;
+    use event::{Envelope, Event};
     use listener::EventListener;
 
     // AN EVENT YOU CAN STOP
@@ -154,5 +154,27 @@ mod tests {
 
         assert_eq!(v.iter().len(), 1);
         assert_eq!(*v.get(0).unwrap(), "fast".to_string());
+    }
+
+    struct IntAndBool {
+        pub int: i32,
+        pub boo: bool,
+    }
+
+    #[test]
+    fn test_event_dispatch_with_envelopes() {
+        let mut dispatcher = Dispatcher::new();
+
+        let listener = EventListener::new(
+            |e: &mut Envelope<IntAndBool>| {
+                assert_eq!(e.data.int, 3);
+                assert_eq!(e.data.boo, true);
+            });
+
+        let mut env = Envelope::new(IntAndBool{ int: 3, boo: true });
+        dispatcher.add_listener(listener);
+        assert!(dispatcher.has_listeners());
+
+        dispatcher.dispatch(&mut env);
     }
 }

@@ -1,6 +1,7 @@
-mod dispatcher;
-mod event;
-mod listener;
+
+pub mod dispatcher;
+pub mod event;
+pub mod listener;
 mod tests;
 
 #[macro_use]
