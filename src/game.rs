@@ -1,20 +1,19 @@
 use std::str;
 use std::borrow::{Borrow, BorrowMut};
 use std::cell::RefCell;
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::fs;
 use std::ops::Deref;
 use std::path::Path;
-use std::rc::{Rc, Weak};
 use bracket_terminal::prelude::*;
 use std::sync::{Arc, Mutex, RwLock};
 use bracket_lib::prelude::*;
 use caves::{Cave, FileCave, MemoryCave};
 use object_pool::{Pool, Reusable};
-use planck_ecs::{Dispatcher, DispatcherBuilder, World};
 use lazy_static::*;
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use serde::{de, Serialize};
+use shipyard::World;
 
 use crate::map::Map;
 use crate::readonly_archive_cave::ReadonlyArchiveCave;
@@ -22,22 +21,23 @@ use crate::commands::{ActionCommand, FlowCommand, GameCommand, GameFlow, HackCom
 use crate::input::{InputSnapshotState, InputSnapshot, KeyboardSnapshot, InputSnapshots};
 use crate::map_gen::run_map_gen;
 use crate::murder_gen::generate_murder;
-use crate::{rand_gen};
+use crate::{core_systems, rand_gen};
 use crate::colors::named_color;
-use crate::entity::{AbstractEntity, Entity};
+use crate::entity::{HasFieldOfView, HasGlyph, HasPosition, IsDirty, IsPlayer};
+use crate::glyph::Glyph;
+use crate::json::JsonFields;
+//use crate::entity::{AbstractEntity, Entity};
 use crate::opt::Opt;
-use crate::rand_gen::get_random_between;
+use crate::rand_gen::{get_random_between, get_random_from};
 use crate::rex::draw_rex;
 use crate::tiles::{DoorState, MapTile, MapTileRep};
 use crate::render_view::{View};
 use crate::render_view::*;
 
-pub type RenderingPassFn = Box<dyn Fn(&mut GameSharedData, &mut BTerm)>;
 pub type Store = PickleDb;
 
 pub struct Game {
     pub shared_data: GameSharedData,
-    pub render_pipeline: Vec<RenderingPassFn>,
 }
 
 pub struct GameSharedData {
@@ -48,8 +48,30 @@ pub struct GameSharedData {
     pub commands: VecDeque<GameCommand>,
     pub input: InputSnapshots,
     pub data: Box<dyn Cave>,
-    pub entities: Vec<Rc<RefCell<dyn AbstractEntity<Data = GameSharedData>>>>,
     pub store: Store,
+    pub world: World,
+}
+
+impl JsonFields for GameSharedData {
+    fn get_json<T>(&self, name: &str) -> Option<T>
+        where for <'a> T: de::Deserialize<'a> {
+        if let Ok(binary_data) = self.data.get(name) {
+            if let Ok(string_data) = str::from_utf8(&binary_data) {
+                let json_as_struct = serde_json::from_str::<T>(string_data).unwrap();
+                return Some(json_as_struct)
+            }
+        }
+
+        return None;
+    }
+
+    fn set_json<T>(&self, name: &str, value: &T)
+        where T: ?Sized + Serialize {
+
+        if let Ok(json) = serde_json::to_string_pretty(value) {
+            self.data.set(name, &json.as_bytes().to_vec()).unwrap();
+        }
+    }
 }
 
 impl GameSharedData {
@@ -66,8 +88,8 @@ impl GameSharedData {
             } else {
                 Box::new(FileCave::new(Path::new(args.data_directory.as_str())).unwrap())
             },
-            entities: Vec::default(),
             store: PickleDb::new("", PickleDbDumpPolicy::NeverDump, SerializationMethod::Bin),
+            world: World::new(),
         }
     }
 
@@ -87,29 +109,8 @@ impl GameSharedData {
             MapTileRep::default()
         };
 
-        add_render_view_rep(view, rep);
+        cache_render_view_rep(view, rep);
     }
-
-    pub fn get_json<T>(&self, name: &str) -> Option<T>
-    where for <'a> T: de::Deserialize<'a> {
-        if let Ok(binary_data) = self.data.get(name) {
-            if let Ok(string_data) = str::from_utf8(&binary_data) {
-                let json_as_struct = serde_json::from_str::<T>(string_data).unwrap();
-                return Some(json_as_struct)
-            }
-        }
-
-        return None;
-    }
-
-    pub fn set_json<T>(&self, name: &str, value: &T)
-        where T: ?Sized + Serialize {
-
-        if let Ok(json) = serde_json::to_string_pretty(value) {
-            self.data.set(name, &json.as_bytes().to_vec()).unwrap();
-        }
-    }
-
 
     pub fn collect_inputs(&mut self) {
         fn handle_editor_input(game: &mut GameSharedData) {
@@ -150,9 +151,14 @@ impl GameSharedData {
         let (map, storage) = run_map_gen(self.size.0, self.size.1);
         self.map = map;
 
-        self.entities.clear();
-        let player = Entity::make_player(storage.rects[0].center());
-        self.entities.push(player);
+        let random_center_point = get_random_from(&storage.rects).center();
+        self.world.add_entity((
+            IsPlayer,
+            IsDirty(true),
+            HasPosition(random_center_point),
+            HasGlyph(Glyph::new('@')),
+            HasFieldOfView(Vec::new()),
+        ));
     }
 
     fn resolve_command_queue(&mut self, ctx: &mut BTerm) {
@@ -193,8 +199,7 @@ impl GameSharedData {
 impl Game {
     pub fn new(w: i32, h: i32, args: &Opt) -> Game {
         Game {
-            render_pipeline: Vec::new(),
-            shared_data: GameSharedData::new(w, h, args)
+            shared_data: GameSharedData::new(w, h, args),
         }
     }
 
@@ -228,60 +233,21 @@ impl Game {
 
         let mut game = Game::new(width, height, &args);
 
-        let mut noise = Vec::with_capacity((width * height) as usize);
-        for i in 0..width * height {
-            noise.push(get_random_between(0.0f32, 1.0f32));
-        }
-
         { /* FOV */
-            let fov = 32;
-            game.shared_data.store.set("fov", &fov);
+            let fov = 16;
+            game.shared_data.store.set("fov", &fov)
+                .expect("Failed storing FOV");
         }
 
-        {
-            /* NOISE MAP */
-            game.shared_data.store.set("noise_map", &noise);
-        }
-
-        fn render_map_if_dirty_and_view(view: &RenderView, game: &GameSharedData, ctx: &mut BTerm) {
-            if game.dirty {
-                if *view == game.store.get::<RenderView>("view").unwrap_or(RenderView::Game) {
-                    ctx.set_active_console(0);
-                    ctx.cls();
-                    game.map.render(ctx, view, &game.store);
-                }
-
-                for holder in &game.entities {
-                    if let cell = holder.clone().as_ref() {
-                        let entity = cell.borrow();
-                        let pos = entity.get_position();
-                        let glyph = entity.get_glyph();
-                        let index = game.map.point2d_to_index(pos);
-
-                        if game.map.is_tile_revealed(index) && game.map.visible[index] {
-                            ctx.print_color(pos.x, pos.y, RGB::from(glyph.fg), RGB::from(glyph.bg), glyph.ch);
-                        }
-                    }
-                }
+        { /* NOISE MAP */
+            let mut noise = Vec::with_capacity((width * height) as usize);
+            for i in 0..width * height {
+                noise.push(get_random_between(0.0, 1.0));
             }
+
+            game.shared_data.store.set("noise_map", &noise)
+                .expect("Failed storing noise map");
         }
-
-        // game view
-        game.render_pipeline.push(Box::new(|game, ctx| {
-            render_map_if_dirty_and_view(&RenderView::Game, game, ctx);
-        }));
-
-        // debug view
-        game.render_pipeline.push(Box::new(|game, ctx| {
-            render_map_if_dirty_and_view(&RenderView::Debug, game, ctx);
-        }));
-
-        // gui
-        game.render_pipeline.push(Box::new(|game, ctx| {
-            ctx.set_active_console(2);
-            ctx.cls();
-            ctx.print_color(1, 1, named_color(WHITE), named_color(BLACK), format!("FPS: {}", ctx.fps));
-        }));
 
         game.shared_data.commands.push_back(GameCommand::Flow(FlowCommand::ReloadViewConfigs));
         game.shared_data.commands.push_back(GameCommand::Flow(FlowCommand::GenerateLevel));
@@ -294,62 +260,36 @@ impl GameState for Game {
     fn tick(&mut self, ctx: &mut BTerm) {
         { /* TIME */
             let mut time = self.shared_data.store.get::<f32>("time").unwrap_or(0.0);
-            time += 0.03;
-            self.shared_data.store.set::<f32>("time", &time);
+            time += 0.01;
+            self.shared_data.store.set::<f32>("time", &time)
+                .expect("Failed storing time");
         }
 
         self.shared_data.resolve_command_queue(ctx);
-
-        for drawing_func in self.render_pipeline.iter() {
-            drawing_func(&mut self.shared_data, ctx);
-        }
-
         self.shared_data.collect_inputs();
 
-        for holder in &self.shared_data.entities {
-            if let cell = holder.clone().as_ref() {
-                let changes = cell.borrow().tick(&self.shared_data);
+        let world = &self.shared_data.world;
 
-                for change in changes {
-                    match change {
-                        ActionCommand::MoveBy(dx, dy) => {
-                            let mut e = cell.borrow_mut();
-                            let new_pos = e.inner().position + Point::new(dx, dy);
-                            let map = &self.shared_data.map;
-                            let index = map.point2d_to_index(new_pos);
-                            if !map.is_tile_blocked(index) {
-                                e.inner_mut().position = new_pos;
-                            } else {
-                                if let MapTile::Door(DoorState::Closed) = map.tiles[index] {
-                                    self.shared_data.map.set(new_pos.x, new_pos.y, MapTile::Door(DoorState::Open));
-                                }
-                            }
-                        },
+        // ONE FRAME (UPDATING ALL DIRTY STUFF)
 
-                        ActionCommand::MoveTo(x, y) => {
-                            let mut e = cell.borrow_mut();
-                            e.inner_mut().position.x = x;
-                            e.inner_mut().position.y = y;
-                        }
+        world.run_with_data(&core_systems::update_fov_system, &self.shared_data)
+            .expect("Update fov system failed");
 
-                        ActionCommand::FovChange(fov) => {
-                            let mut map = &mut self.shared_data.map;
+        world.run_with_data(&core_systems::update_revealed_fields_system, &mut self.shared_data.map)
+            .expect("Update revealed fields system failed");
 
-                            map.hide();
-                            map.show(fov);
-                        }
-                    }
-                }
+        world.run_with_data(&core_systems::render_map_system, (&self.shared_data, ctx))
+            .expect("Render game system failed");
 
-                {
-                    let entity = cell.borrow();
-                    if entity.is_player() {
-                        let pt = entity.get_position();
-                        let p = (pt.x, pt.y);
-                        self.shared_data.store.set("player_position", &p);
-                    }
-                }
-            }
-        }
+        world.run_with_data(&core_systems::render_entities_system, (&self.shared_data, ctx))
+            .expect("Render entities system failed");
+
+        world.run(&core_systems::mark_clean_system).expect("Mark clean system failed");
+
+        // PREP FOR SECOND FRAME (ALL DIRTY IS CLEAN HERE)
+
+        world.run_with_data(&core_systems::handle_player_movement_system,
+            (&self.shared_data.input, &mut self.shared_data.store))
+            .expect("Handle player movement system failed");
     }
 }

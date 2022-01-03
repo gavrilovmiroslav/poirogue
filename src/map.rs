@@ -92,6 +92,10 @@ impl Map {
         self.revealed[tile_index]
     }
 
+    pub fn is_tile_visible(&self, tile_index: TileIndex) -> bool {
+        self.visible[tile_index]
+    }
+
     pub fn is_exit_valid(&self, x:i32, y:i32) -> bool {
         if x < 1 || x > self.width - 1 || y < 1 || y > self.height - 1 {
             return false;
@@ -121,9 +125,9 @@ impl Map {
         }
     }
 
-    pub fn show(&mut self, vis: Vec<(i32, i32)>) {
-        for (x, y) in vis {
-            let index = self.point2d_to_index(Point::new(x, y));
+    pub fn show(&mut self, vis: &[Point]) {
+        for p in vis {
+            let index = self.point2d_to_index(*p);
             self.visible[index] = true;
             self.revealed[index] = true;
         }

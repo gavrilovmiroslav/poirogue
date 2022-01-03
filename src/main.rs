@@ -18,6 +18,8 @@ mod opt;
 mod glyph;
 mod entity;
 mod colors;
+mod core_systems;
+mod json;
 
 embedded_resource!(TILE_FONT, "../resources/classic_roguelike_white.png");
 embedded_resource!(IMAGE_FONT, "../resources/MRMOTEXTEX_rexpaintx2.png");

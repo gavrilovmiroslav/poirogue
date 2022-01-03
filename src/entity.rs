@@ -1,3 +1,4 @@
+/*
 use std::borrow::Borrow;
 use serde::{Serialize, Deserialize};
 use std::cell::RefCell;
@@ -123,4 +124,30 @@ impl AbstractEntity for Entity {
 
         result
     }
+}
+*/
+
+use std::collections::HashSet;
+use bracket_lib::prelude::Point;
+use shipyard::{AddComponent, EntityId};
+use crate::glyph::Glyph;
+
+pub struct HasPosition(pub Point);
+impl HasPosition {
+    pub fn get_mut(&mut self) -> &mut Point {
+        &mut self.0
+    }
+}
+
+pub struct HasGlyph(pub Glyph);
+
+pub struct HasFieldOfView(pub Vec<Point>);
+
+pub struct IsPlayer;
+
+pub struct IsDirty(pub bool);
+impl IsDirty {
+    #[inline(always)] pub fn is_dirty(&self) -> bool { self.0 }
+    #[inline(always)] pub fn mark(&mut self) { self.0 = true; }
+    #[inline(always)] pub fn clean(&mut self) { self.0 = false; }
 }

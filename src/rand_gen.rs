@@ -25,3 +25,8 @@ pub fn get_random_between<T>(a: T, b: T) -> T
         panic!("Random number generator not initialized! Please call `init_random_with_random_seed()` or `init_random_with_seed(u64)` before calling this function!");
     }
 }
+
+pub fn get_random_from<T>(v: &[T]) -> &T {
+    let index = get_random_between(0, v.len() - 1);
+    &v[index]
+}

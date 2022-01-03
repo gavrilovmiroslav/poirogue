@@ -35,11 +35,10 @@ pub enum RenderView {
     Debug,
 }
 
-pub fn add_render_view_rep(view: RenderView, rep: MapTileRep) {
+pub fn cache_render_view_rep(view: RenderView, rep: MapTileRep) {
     let mut cache = VIEW_REP_LRU.lock().unwrap();
     cache.put(view, rep);
 }
-
 
 impl RenderView {
     pub fn toggle(&self) -> RenderView {
@@ -153,4 +152,5 @@ impl View for RenderView {
         }
     }
 }
+
 
