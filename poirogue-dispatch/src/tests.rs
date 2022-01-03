@@ -2,7 +2,7 @@
 #[cfg(test)]
 mod tests {
     use std::sync::Mutex;
-    use dispatcher::{Dispatch, Dispatcher};
+    use dispatcher::Dispatcher;
     use event::{Envelope, Event};
     use listener::EventListener;
 

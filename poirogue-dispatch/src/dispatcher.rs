@@ -7,14 +7,19 @@ use std::collections::hash_map::Entry;
 use event::Event;
 use listener::EventListener;
 
-pub trait Dispatch<E: Event> {
-    fn get_dispatcher(&self) -> &Dispatcher<E>;
-    fn get_dispatcher_mut(&mut self) -> &mut Dispatcher<E>;
+pub struct Dispatcher<E: Event> {
+    listeners: HashMap<TypeId, Vec<Rc<EventListener<E>>>>,
+}
 
-    fn dispatch(&self, event: &mut E) {
+impl<E: Event> Dispatcher<E> {
+    pub fn new() -> Dispatcher<E> {
+        Dispatcher { listeners: HashMap::new() }
+    }
+
+    pub fn dispatch(&self, event: &mut E) {
         let type_id = TypeId::of::<E>();
 
-        if let Some(listeners) = self.get_dispatcher().listeners.get(&type_id) {
+        if let Some(listeners) = self.listeners.get(&type_id) {
             for l in listeners.iter() {
                 if event.is_propagating() {
                     l.apply(event);
@@ -25,12 +30,12 @@ pub trait Dispatch<E: Event> {
         }
     }
 
-    fn add_listener(&mut self, listener: EventListener<E>) -> Rc<EventListener<E>> {
+    pub fn add_listener(&mut self, listener: EventListener<E>) -> Rc<EventListener<E>> {
         let rc: Rc<EventListener<E>> = Rc::new(listener);
         let ret = rc.clone();
         let type_id = TypeId::of::<E>();
 
-        match self.get_dispatcher_mut().listeners.entry(type_id) {
+        match self.listeners.entry(type_id) {
             Entry::Occupied(mut o) => {
                 let el = o.get_mut();
                 el.push(rc);
@@ -42,10 +47,10 @@ pub trait Dispatch<E: Event> {
         ret
     }
 
-    fn remove_listener(&mut self, listener: Rc<EventListener<E>>) {
+    pub fn remove_listener(&mut self, listener: Rc<EventListener<E>>) {
         let type_id = TypeId::of::<E>();
 
-        if let Entry::Occupied(mut o) = self.get_dispatcher_mut().listeners.entry(type_id) {
+        if let Entry::Occupied(mut o) = self.listeners.entry(type_id) {
             let listeners = o.get_mut();
             let mut idx: usize = 0;
             for l in listeners.iter() {
@@ -58,16 +63,6 @@ pub trait Dispatch<E: Event> {
             listeners.remove(idx);
         }
     }
-}
-
-pub struct Dispatcher<E: Event> {
-    listeners: HashMap<TypeId, Vec<Rc<EventListener<E>>>>,
-}
-
-impl<E: Event> Dispatcher<E> {
-    pub fn new() -> Dispatcher<E> {
-        Dispatcher { listeners: HashMap::new() }
-    }
 
     pub fn has_listeners(&self) -> bool {
         let type_id = TypeId::of::<E>();
@@ -75,9 +70,4 @@ impl<E: Event> Dispatcher<E> {
         self.listeners.contains_key(&type_id) &&
             self.listeners.get(&type_id).map_or(0, |v| v.len()) > 0
     }
-}
-
-impl<E: Event> Dispatch<E> for Dispatcher<E> {
-    fn get_dispatcher(&self) -> &Dispatcher<E> { self }
-    fn get_dispatcher_mut(&mut self) -> &mut Dispatcher<E> { self }
 }
