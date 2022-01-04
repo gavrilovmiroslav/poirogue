@@ -8,13 +8,12 @@ use serde::ser::{Error, SerializeStruct};
 use crate::colors::named_color;
 use crate::commands::{FlowCommand, GameCommand, HackCommand};
 use crate::entity::*;
-use crate::game::{GameSharedData, Store};
+use crate::game::{GameData, Store};
 use crate::input::{InputSnapshot, InputSnapshots};
 use crate::map::Map;
+use crate::POSITION_QUERY_REQUEST_QUEUE;
 use crate::render_view::RenderView;
 use crate::tiles::{DoorState, MapTile, TileIndex};
-
-static POSITION_QUERY_REQUEST_QUEUE: &str = "position_query_request_queue";
 
 pub fn accept_meta_commands((input, comms): (&InputSnapshots, &mut VecDeque<GameCommand>)) {
     if input.keyboard.is_released(VirtualKeyCode::Escape) {
@@ -47,7 +46,7 @@ pub fn accept_meta_commands((input, comms): (&InputSnapshots, &mut VecDeque<Game
 }
 
 
-pub fn update_fov_system((store, map): (&Store, &Map),
+pub fn update_dirty_fovs((store, map): (&Store, &Map),
                          positions: View<HasPosition>, mut fovs: ViewMut<HasFieldOfView>, dirty: View<IsDirty>) {
 
     for (pos, mut fov, _) in (&positions, &mut fovs, &dirty).iter().filter(|(_, _, d)| d.is_dirty()) {
@@ -55,13 +54,14 @@ pub fn update_fov_system((store, map): (&Store, &Map),
     }
 }
 
-pub fn update_revealed_fields_system(map: &mut Map, _: View<IsPlayer>, fovs: View<HasFieldOfView>, dirty: View<IsDirty>) {
 
+pub fn update_revealed_map(map: &mut Map, _: View<IsPlayer>, fovs: View<HasFieldOfView>, dirty: View<IsDirty>) {
     for (fov, _) in (&fovs, &dirty).iter().filter(|(_, d)| d.is_dirty()) {
         map.hide();
         map.show(&fov.0);
     }
 }
+
 
 #[derive(Serialize, Deserialize)]
 pub struct QueryPositionRequest {
@@ -76,8 +76,8 @@ pub enum Motion {
 }
 
 
-pub fn handle_player_control_system((input, store): (&InputSnapshots, &mut Store),
-                                     _: View<IsPlayer>, mut positions: ViewMut<HasPosition>) {
+pub fn handle_player_controls((input, store): (&InputSnapshots, &mut Store),
+                              _: View<IsPlayer>, mut positions: ViewMut<HasPosition>) {
 
     for (id, mut has_pos) in (&mut positions).iter().with_id() {
         let keyboard = &input.keyboard;
@@ -90,17 +90,13 @@ pub fn handle_player_control_system((input, store): (&InputSnapshots, &mut Store
         if keyboard.is_pressed(VirtualKeyCode::Right) { new_pos.x += 1; }
 
         if *pos != new_pos {
-            if !store.lexists(POSITION_QUERY_REQUEST_QUEUE) {
-                store.lcreate(POSITION_QUERY_REQUEST_QUEUE);
-            }
-
             store.ladd(POSITION_QUERY_REQUEST_QUEUE, &QueryPositionRequest { entity: id.inner(), pos: new_pos.to_tuple() });
         }
     }
 }
 
 
-pub fn handle_query_position_by_map_blocking((map, store): (&Map, &mut Store), mut storage: AllStoragesViewMut) {
+pub fn query_position_for_wall_blocking((map, store): (&Map, &mut Store), mut storage: AllStoragesViewMut) {
     let mut returns = Vec::new();
 
     while let Some(item) = store.lpop::<QueryPositionRequest>(POSITION_QUERY_REQUEST_QUEUE, 0) {
@@ -121,7 +117,7 @@ pub fn handle_query_position_by_map_blocking((map, store): (&Map, &mut Store), m
 }
 
 
-pub fn handle_query_position_by_door_opening((map, store): (&mut Map, &mut Store), mut storage: AllStoragesViewMut) {
+pub fn query_position_for_door_opening((map, store): (&mut Map, &mut Store), mut storage: AllStoragesViewMut) {
     let mut returns = Vec::new();
 
     while let Some(item) = store.lpop::<QueryPositionRequest>(POSITION_QUERY_REQUEST_QUEUE, 0) {
@@ -157,7 +153,7 @@ pub fn handle_move_to_commands(map: &Map, mut positions: ViewMut<HasPosition>, m
 }
 
 
-pub fn render_map_system((map, store, ctx): (&mut Map, &Store, &mut BTerm)) {
+pub fn render_map((map, store, ctx): (&mut Map, &Store, &mut BTerm)) {
     fn render_map_layer(map: &mut Map, store: &Store, ctx: &mut BTerm) {
         let view = store.get::<RenderView>("view")
             .unwrap_or(RenderView::Game);
@@ -178,9 +174,7 @@ pub fn render_map_system((map, store, ctx): (&mut Map, &Store, &mut BTerm)) {
 }
 
 
-pub fn render_entities_system((map, ctx): (&Map, &mut BTerm),
-                              positions: View<HasPosition>, glyphs: View<HasGlyph>) {
-
+pub fn render_entities((map, ctx): (&Map, &mut BTerm), positions: View<HasPosition>, glyphs: View<HasGlyph>) {
     for (has_pos, has_glyph) in (&positions, &glyphs).iter() {
         let glyph = has_glyph.0;
         let pos = has_pos.0;
@@ -192,8 +186,7 @@ pub fn render_entities_system((map, ctx): (&Map, &mut BTerm),
 }
 
 
-pub fn mark_clean_system(mut dirty: ViewMut<IsDirty>) {
-
+pub fn clean_dirty(mut dirty: ViewMut<IsDirty>) {
     for (mut dirt) in (&mut dirty).iter().filter(|(d)| d.is_dirty()) {
         dirt.clean();
     }

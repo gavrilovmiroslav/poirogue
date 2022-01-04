@@ -22,7 +22,7 @@ use crate::commands::{ActionCommand, FlowCommand, GameCommand, GameFlow, HackCom
 use crate::input::{InputSnapshotState, InputSnapshot, KeyboardSnapshot, InputSnapshots};
 use crate::map_gen::run_map_gen;
 use crate::murder_gen::generate_murder;
-use crate::{core_systems, rand_gen};
+use crate::{core_systems, POSITION_QUERY_REQUEST_QUEUE, rand_gen};
 use crate::colors::named_color;
 use crate::entity::{HasFieldOfView, HasGlyph, HasPosition, IsDirty, IsPlayer};
 use crate::glyph::Glyph;
@@ -38,10 +38,10 @@ use crate::render_view::*;
 pub type Store = PickleDb;
 
 pub struct Game {
-    pub shared_data: GameSharedData,
+    pub data: GameData,
 }
 
-pub struct GameSharedData {
+pub struct GameData {
     pub dirty: bool,
     pub size: (i32, i32),
     pub map: Map,
@@ -53,7 +53,7 @@ pub struct GameSharedData {
     pub world: World,
 }
 
-impl JsonFields for GameSharedData {
+impl JsonFields for GameData {
     fn get_json<T>(&self, name: &str) -> Option<T>
         where for <'a> T: de::Deserialize<'a> {
         if let Ok(binary_data) = self.data.get(name) {
@@ -75,9 +75,9 @@ impl JsonFields for GameSharedData {
     }
 }
 
-impl GameSharedData {
-    pub fn new(w: i32, h: i32, args: &Opt) -> GameSharedData {
-        GameSharedData {
+impl GameData {
+    pub fn new(w: i32, h: i32, args: &Opt) -> GameData {
+        GameData {
             dirty: true,
             size: (w, h),
             map: Map::new(w, h),
@@ -91,6 +91,33 @@ impl GameSharedData {
             },
             store: PickleDb::new("", PickleDbDumpPolicy::NeverDump, SerializationMethod::Bin),
             world: World::new(),
+        }
+    }
+
+    pub fn setup_store(&mut self) {
+        { /* FOV */
+            let fov = 16;
+            self.store.set("fov", &fov)
+                .expect("Failed storing FOV");
+        }
+
+        { /* NOISE MAP */
+            let size = (self.map.width * self.map.height) as usize;
+            let mut noise = Vec::with_capacity(size);
+            for _ in 0..size {
+                noise.push(get_random_between(0.0, 1.0));
+            }
+
+            self.store.set("noise_map", &noise)
+                .expect("Failed storing noise map");
+        }
+
+        { /* STORED LISTS */
+            self.store.lcreate(POSITION_QUERY_REQUEST_QUEUE);
+        }
+
+        { /* TIME */
+            self.store.set("time", &0.0);
         }
     }
 
@@ -164,9 +191,7 @@ impl GameSharedData {
 
 impl Game {
     pub fn new(w: i32, h: i32, args: &Opt) -> Game {
-        Game {
-            shared_data: GameSharedData::new(w, h, args),
-        }
+        Game { data: GameData::new(w, h, args), }
     }
 
     pub fn run(args: Opt) {
@@ -199,42 +224,29 @@ impl Game {
 
         let mut game = Game::new(width, height, &args);
 
-        { /* FOV */
-            let fov = 16;
-            game.shared_data.store.set("fov", &fov)
-                .expect("Failed storing FOV");
-        }
+        game.data.setup_store();
 
-        { /* NOISE MAP */
-            let mut noise = Vec::with_capacity((width * height) as usize);
-            for i in 0..width * height {
-                noise.push(get_random_between(0.0, 1.0));
-            }
-
-            game.shared_data.store.set("noise_map", &noise)
-                .expect("Failed storing noise map");
-        }
-
-        game.shared_data.commands.push_back(GameCommand::Flow(FlowCommand::ReloadViewConfigs));
-        game.shared_data.commands.push_back(GameCommand::Flow(FlowCommand::GenerateLevel));
+        game.data.commands.push_back(GameCommand::Flow(FlowCommand::ReloadViewConfigs));
+        game.data.commands.push_back(GameCommand::Flow(FlowCommand::GenerateLevel));
 
         main_loop(term,game).unwrap();
+    }
+
+    fn update_time(&mut self) {
+        let mut time = self.data.store.get::<f32>("time").unwrap();
+        time += 1.0;
+        self.data.store.set::<f32>("time", &time).expect("Failed storing time");
     }
 }
 
 impl GameState for Game {
     fn tick(&mut self, ctx: &mut BTerm) {
-        { /* TIME */
-            let mut time = self.shared_data.store.get::<f32>("time").unwrap_or(0.0);
-            time += 0.01;
-            self.shared_data.store.set::<f32>("time", &time)
-                .expect("Failed storing time");
-        }
+        self.update_time();
 
-        self.shared_data.resolve_command_queue(ctx);
-        self.shared_data.input.make_new_snapshots(INPUT.lock().borrow());
+        self.data.resolve_command_queue(ctx);
+        self.data.input.make_new_snapshots(INPUT.lock().borrow());
 
-        let data = &mut self.shared_data;
+        let data = &mut self.data;
         let world = &data.world;
 
         // META STUFF
@@ -243,23 +255,17 @@ impl GameState for Game {
 
         // ONE FRAME (UPDATING ALL DIRTY STUFF)
 
-        world.run_with_data(&core_systems::update_fov_system, (&data.store, &data.map)).unwrap();
-        world.run_with_data(&core_systems::update_revealed_fields_system, &mut data.map).unwrap();
-        world.run_with_data(&core_systems::render_map_system, (&mut data.map, &data.store, ctx)).unwrap();
-        world.run_with_data(&core_systems::render_entities_system, (&data.map, ctx)).unwrap();
-        world.run(&core_systems::mark_clean_system).unwrap();
+        world.run_with_data(&core_systems::update_dirty_fovs, (&data.store, &data.map)).unwrap();
+        world.run_with_data(&core_systems::update_revealed_map, &mut data.map).unwrap();
+        world.run_with_data(&core_systems::render_map, (&mut data.map, &data.store, ctx)).unwrap();
+        world.run_with_data(&core_systems::render_entities, (&data.map, ctx)).unwrap();
+        world.run(&core_systems::clean_dirty).unwrap();
 
         // PREP FOR SECOND FRAME (ALL DIRTY IS CLEAN HERE)
 
-        world.run_with_data(&core_systems::handle_player_control_system,
-                            (&data.input, &mut data.store)).unwrap();
-
-        world.run_with_data(&core_systems::handle_query_position_by_map_blocking,
-                            (&data.map, &mut data.store)).unwrap();
-
-        world.run_with_data(&core_systems::handle_query_position_by_door_opening,
-                            (&mut data.map, &mut data.store)).unwrap();
-
+        world.run_with_data(&core_systems::handle_player_controls, (&data.input, &mut data.store)).unwrap();
+        world.run_with_data(&core_systems::query_position_for_wall_blocking, (&data.map, &mut data.store)).unwrap();
+        world.run_with_data(&core_systems::query_position_for_door_opening, (&mut data.map, &mut data.store)).unwrap();
         world.run_with_data(&core_systems::handle_move_to_commands, &data.map).unwrap();
     }
 }

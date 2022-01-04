@@ -4,7 +4,7 @@ use bracket_lib::prelude::{BTerm, xp_to_draw_batch, XpFile};
 use caves::Cave;
 use lazy_static::*;
 use object_pool::Reusable;
-use crate::game::{Game, GameSharedData};
+use crate::game::{Game, GameData};
 use bracket_lib::prelude::DrawBatch;
 use lru::{DefaultHasher, LruCache};
 
@@ -17,7 +17,7 @@ fn dig_from_cave(data: &dyn Cave, name: &'static str) -> XpFile {
     XpFile::read(&mut &*buffer).unwrap()
 }
 
-pub fn draw_rex(game: &mut GameSharedData, ctx: &mut BTerm, name: &'static str, x: i32, y: i32) {
+pub fn draw_rex(game: &mut GameData, ctx: &mut BTerm, name: &'static str, x: i32, y: i32) {
     let mut lru = XP_LRU.lock().unwrap();
     if !lru.contains(&name) {
         let rex = dig_from_cave(game.data.borrow(), name);
