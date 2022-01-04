@@ -5,6 +5,7 @@ use std::collections::{HashSet, VecDeque};
 use std::fs;
 use std::ops::Deref;
 use std::path::Path;
+use std::rc::Rc;
 use bracket_terminal::prelude::*;
 use std::sync::{Arc, Mutex, RwLock};
 use bracket_lib::prelude::*;
@@ -112,47 +113,12 @@ impl GameSharedData {
         cache_render_view_rep(view, rep);
     }
 
-    pub fn collect_inputs(&mut self) {
-        fn handle_editor_input(game: &mut GameSharedData) {
-            if game.input.keyboard.is_released(VirtualKeyCode::Escape) {
-                game.commands.push_back(GameCommand::Flow(FlowCommand::Exit));
-            }
-
-            if game.input.keyboard.is_pressed(VirtualKeyCode::Return) {
-                game.commands.push_back(GameCommand::Flow(FlowCommand::GenerateLevel));
-            }
-
-            if game.input.keyboard.is_pressed(VirtualKeyCode::Tab) {
-                game.commands.push_back(GameCommand::Flow(FlowCommand::CycleViews));
-            }
-
-            if game.input.keyboard.is_pressed(VirtualKeyCode::F2) {
-                game.commands.push_back(GameCommand::Hack(HackCommand::UnlockAllDoors));
-            }
-
-            if game.input.keyboard.is_pressed(VirtualKeyCode::F3) {
-                game.commands.push_back(GameCommand::Hack(HackCommand::LockAllDoors));
-            }
-
-            if game.input.keyboard.is_pressed(VirtualKeyCode::F4) {
-                game.commands.push_back(GameCommand::Flow(FlowCommand::GenerateLevel));
-            }
-
-            if game.input.keyboard.is_pressed(VirtualKeyCode::F5) {
-                game.commands.push_back(GameCommand::Flow(FlowCommand::ReloadViewConfigs));
-            }
-        }
-
-        self.input.make_new_snapshots(INPUT.lock().borrow());
-        handle_editor_input(self);
-    }
-
     fn create_new_level(&mut self) {
         let (map, storage) = run_map_gen(self.size.0, self.size.1);
         self.map = map;
 
         let random_center_point = get_random_from(&storage.rects).center();
-        self.world.add_entity((
+        self.world.borrow_mut().add_entity((
             IsPlayer,
             IsDirty(true),
             HasPosition(random_center_point),
@@ -266,30 +232,34 @@ impl GameState for Game {
         }
 
         self.shared_data.resolve_command_queue(ctx);
-        self.shared_data.collect_inputs();
+        self.shared_data.input.make_new_snapshots(INPUT.lock().borrow());
 
-        let world = &self.shared_data.world;
+        let data = &mut self.shared_data;
+        let world = &data.world;
+
+        // META STUFF
+
+        world.run_with_data(&core_systems::accept_meta_commands, (&data.input, &mut data.commands)).unwrap();
 
         // ONE FRAME (UPDATING ALL DIRTY STUFF)
 
-        world.run_with_data(&core_systems::update_fov_system, &self.shared_data)
-            .expect("Update fov system failed");
-
-        world.run_with_data(&core_systems::update_revealed_fields_system, &mut self.shared_data.map)
-            .expect("Update revealed fields system failed");
-
-        world.run_with_data(&core_systems::render_map_system, (&self.shared_data, ctx))
-            .expect("Render game system failed");
-
-        world.run_with_data(&core_systems::render_entities_system, (&self.shared_data, ctx))
-            .expect("Render entities system failed");
-
-        world.run(&core_systems::mark_clean_system).expect("Mark clean system failed");
+        world.run_with_data(&core_systems::update_fov_system, (&data.store, &data.map)).unwrap();
+        world.run_with_data(&core_systems::update_revealed_fields_system, &mut data.map).unwrap();
+        world.run_with_data(&core_systems::render_map_system, (&mut data.map, &data.store, ctx)).unwrap();
+        world.run_with_data(&core_systems::render_entities_system, (&data.map, ctx)).unwrap();
+        world.run(&core_systems::mark_clean_system).unwrap();
 
         // PREP FOR SECOND FRAME (ALL DIRTY IS CLEAN HERE)
 
-        world.run_with_data(&core_systems::handle_player_movement_system,
-            (&self.shared_data.input, &mut self.shared_data.store))
-            .expect("Handle player movement system failed");
+        world.run_with_data(&core_systems::handle_player_control_system,
+                            (&data.input, &mut data.store)).unwrap();
+
+        world.run_with_data(&core_systems::handle_query_position_by_map_blocking,
+                            (&data.map, &mut data.store)).unwrap();
+
+        world.run_with_data(&core_systems::handle_query_position_by_door_opening,
+                            (&mut data.map, &mut data.store)).unwrap();
+
+        world.run_with_data(&core_systems::handle_move_to_commands, &data.map).unwrap();
     }
 }

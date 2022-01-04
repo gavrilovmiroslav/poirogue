@@ -1,19 +1,57 @@
+use std::collections::VecDeque;
 use bracket_color::prelude::{BLACK, WHITE};
-use bracket_lib::prelude::{Algorithm2D, BTerm, field_of_view_set, VirtualKeyCode};
-use shipyard::{IntoIter, View, ViewMut};
+use bracket_lib::prelude::{Algorithm2D, BTerm, field_of_view_set, VirtualKeyCode, Point, Input};
+use shipyard::{AddEntity, AllStoragesViewMut, EntityId, IntoIter, IntoWithId, View, ViewMut, World};
 use bracket_color::prelude::RGB;
+use serde::{Serialize, Deserialize, Serializer, Deserializer};
+use serde::ser::{Error, SerializeStruct};
 use crate::colors::named_color;
+use crate::commands::{FlowCommand, GameCommand, HackCommand};
 use crate::entity::*;
 use crate::game::{GameSharedData, Store};
 use crate::input::{InputSnapshot, InputSnapshots};
 use crate::map::Map;
 use crate::render_view::RenderView;
+use crate::tiles::{DoorState, MapTile, TileIndex};
 
-pub fn update_fov_system(data: &GameSharedData,
+static POSITION_QUERY_REQUEST_QUEUE: &str = "position_query_request_queue";
+
+pub fn accept_meta_commands((input, comms): (&InputSnapshots, &mut VecDeque<GameCommand>)) {
+    if input.keyboard.is_released(VirtualKeyCode::Escape) {
+        comms.push_back(GameCommand::Flow(FlowCommand::Exit));
+    }
+
+    if input.keyboard.is_pressed(VirtualKeyCode::Return) {
+        comms.push_back(GameCommand::Flow(FlowCommand::GenerateLevel));
+    }
+
+    if input.keyboard.is_pressed(VirtualKeyCode::Tab) {
+        comms.push_back(GameCommand::Flow(FlowCommand::CycleViews));
+    }
+
+    if input.keyboard.is_pressed(VirtualKeyCode::F2) {
+        comms.push_back(GameCommand::Hack(HackCommand::UnlockAllDoors));
+    }
+
+    if input.keyboard.is_pressed(VirtualKeyCode::F3) {
+        comms.push_back(GameCommand::Hack(HackCommand::LockAllDoors));
+    }
+
+    if input.keyboard.is_pressed(VirtualKeyCode::F4) {
+        comms.push_back(GameCommand::Flow(FlowCommand::GenerateLevel));
+    }
+
+    if input.keyboard.is_pressed(VirtualKeyCode::F5) {
+        comms.push_back(GameCommand::Flow(FlowCommand::ReloadViewConfigs));
+    }
+}
+
+
+pub fn update_fov_system((store, map): (&Store, &Map),
                          positions: View<HasPosition>, mut fovs: ViewMut<HasFieldOfView>, dirty: View<IsDirty>) {
 
     for (pos, mut fov, _) in (&positions, &mut fovs, &dirty).iter().filter(|(_, _, d)| d.is_dirty()) {
-        fov.0 = field_of_view_set(pos.0, data.store.get("fov").unwrap_or(16), &data.map).into_iter().collect()
+        fov.0 = field_of_view_set(pos.0, store.get("fov").unwrap_or(16), map).into_iter().collect()
     }
 }
 
@@ -25,45 +63,108 @@ pub fn update_revealed_fields_system(map: &mut Map, _: View<IsPlayer>, fovs: Vie
     }
 }
 
-pub fn handle_player_movement_system((input, store): (&InputSnapshots, &mut Store),
-                                     _: View<IsPlayer>, mut positions: ViewMut<HasPosition>, mut dirty: ViewMut<IsDirty>) {
+#[derive(Serialize, Deserialize)]
+pub struct QueryPositionRequest {
+    pub entity: u64,
+    pub pos: (i32, i32),
+}
 
-    for (mut has_pos, mut dirt) in (&mut positions, &mut dirty).iter() {
+#[derive(Serialize, Deserialize)]
+pub enum Motion {
+    Unrest,
+    MoveTo(TileIndex),
+}
+
+
+pub fn handle_player_control_system((input, store): (&InputSnapshots, &mut Store),
+                                     _: View<IsPlayer>, mut positions: ViewMut<HasPosition>) {
+
+    for (id, mut has_pos) in (&mut positions).iter().with_id() {
         let keyboard = &input.keyboard;
         let pos = has_pos.get_mut();
 
-        if keyboard.is_pressed(VirtualKeyCode::Up) {
-            pos.y -= 1; dirt.mark();
-        }
+        let mut new_pos = Point::from(*pos);
+        if keyboard.is_pressed(VirtualKeyCode::Up) { new_pos.y -= 1; }
+        if keyboard.is_pressed(VirtualKeyCode::Down) { new_pos.y += 1; }
+        if keyboard.is_pressed(VirtualKeyCode::Left) { new_pos.x -= 1; }
+        if keyboard.is_pressed(VirtualKeyCode::Right) { new_pos.x += 1; }
 
-        if keyboard.is_pressed(VirtualKeyCode::Down) {
-            pos.y += 1; dirt.mark();
-        }
+        if *pos != new_pos {
+            if !store.lexists(POSITION_QUERY_REQUEST_QUEUE) {
+                store.lcreate(POSITION_QUERY_REQUEST_QUEUE);
+            }
 
-        if keyboard.is_pressed(VirtualKeyCode::Left) {
-            pos.x -= 1; dirt.mark();
-        }
-
-        if keyboard.is_pressed(VirtualKeyCode::Right) {
-            pos.x += 1; dirt.mark();
-        }
-
-        if dirt.is_dirty() {
-            store.set("player_position", &(pos.x, pos.y))
-                .expect("Failed storing player position");
+            store.ladd(POSITION_QUERY_REQUEST_QUEUE, &QueryPositionRequest { entity: id.inner(), pos: new_pos.to_tuple() });
         }
     }
 }
 
-pub fn render_map_system((data, ctx): (&GameSharedData, &mut BTerm)) {
 
-    fn render_map_layer(data: &GameSharedData, ctx: &mut BTerm) {
-        let view = data.store.get::<RenderView>("view")
+pub fn handle_query_position_by_map_blocking((map, store): (&Map, &mut Store), mut storage: AllStoragesViewMut) {
+    let mut returns = Vec::new();
+
+    while let Some(item) = store.lpop::<QueryPositionRequest>(POSITION_QUERY_REQUEST_QUEUE, 0) {
+        let index = map.point2d_to_index(Point::from(item.pos));
+
+        if let Some(entity) = EntityId::from_inner(item.entity) {
+            if !map.is_tile_blocked(index) {
+                storage.add_component(entity, (Motion::MoveTo(index), ));
+            } else {
+                returns.push(item);
+            }
+        }
+    }
+
+    if returns.len() > 0 {
+        store.lextend(POSITION_QUERY_REQUEST_QUEUE, &returns);
+    }
+}
+
+
+pub fn handle_query_position_by_door_opening((map, store): (&mut Map, &mut Store), mut storage: AllStoragesViewMut) {
+    let mut returns = Vec::new();
+
+    while let Some(item) = store.lpop::<QueryPositionRequest>(POSITION_QUERY_REQUEST_QUEUE, 0) {
+        let index = map.point2d_to_index(Point::from(item.pos));
+
+        if let Some(entity) = EntityId::from_inner(item.entity) {
+            if let MapTile::Door(DoorState::Closed) = map.tiles[index] {
+                map.tiles[index] = MapTile::Door(DoorState::Open);
+                storage.add_component(entity, (Motion::Unrest,));
+            } else {
+                returns.push(item);
+            }
+        }
+    }
+
+    if returns.len() > 0 {
+        store.lextend(POSITION_QUERY_REQUEST_QUEUE, &returns);
+    }
+}
+
+
+pub fn handle_move_to_commands(map: &Map, mut positions: ViewMut<HasPosition>, mut dirty: ViewMut<IsDirty>, mut motions: ViewMut<Motion>) {
+    for (mut pos, mut dirt, mov) in (&mut positions, &mut dirty, &motions).iter() {
+        if let Motion::MoveTo(index) = mov {
+            let pt = map.index_to_point2d(*index);
+            pos.0 = pt;
+        }
+
+        dirt.mark();
+    }
+
+    motions.clear();
+}
+
+
+pub fn render_map_system((map, store, ctx): (&mut Map, &Store, &mut BTerm)) {
+    fn render_map_layer(map: &mut Map, store: &Store, ctx: &mut BTerm) {
+        let view = store.get::<RenderView>("view")
             .unwrap_or(RenderView::Game);
 
         ctx.set_active_console(0);
         ctx.cls();
-        data.map.render(ctx, &view, &data.store);
+        map.render(ctx, &view, &store);
     }
 
     fn render_fps_count(ctx: &mut BTerm) {
@@ -72,22 +173,24 @@ pub fn render_map_system((data, ctx): (&GameSharedData, &mut BTerm)) {
         ctx.print_color(1, 1, named_color(WHITE), named_color(BLACK), format!("FPS: {}", ctx.fps));
     }
 
-    render_map_layer(data, ctx);
+    render_map_layer(map, store, ctx);
     render_fps_count(ctx);
 }
 
-pub fn render_entities_system((data, ctx): (&GameSharedData, &mut BTerm),
+
+pub fn render_entities_system((map, ctx): (&Map, &mut BTerm),
                               positions: View<HasPosition>, glyphs: View<HasGlyph>) {
 
     for (has_pos, has_glyph) in (&positions, &glyphs).iter() {
         let glyph = has_glyph.0;
         let pos = has_pos.0;
-        let index = data.map.point2d_to_index(pos);
-        if data.map.is_tile_revealed(index) && data.map.is_tile_visible(index) {
+        let index = map.point2d_to_index(pos);
+        if map.is_tile_revealed(index) && map.is_tile_visible(index) {
             ctx.print_color(pos.x, pos.y, RGB::from(glyph.fg), RGB::from(glyph.bg), glyph.ch);
         }
     }
 }
+
 
 pub fn mark_clean_system(mut dirty: ViewMut<IsDirty>) {
 
