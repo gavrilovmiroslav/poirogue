@@ -158,7 +158,7 @@ pub fn update_stored_player_position(store: &mut Store, positions: View<HasPosit
     }
 }
 
-pub fn render_map((map, store, ctx): (&mut Map, &Store, &mut BTerm)) {
+pub fn render_map((map, store, ctx): (&mut Map, &Store, &mut BTerm), dirty: View<IsDirty>, _: View<IsPlayer>) {
     fn render_map_layer(map: &mut Map, store: &Store, ctx: &mut BTerm) {
         let view = store.get::<RenderView>("view")
             .unwrap_or(RenderView::Game);
@@ -174,7 +174,10 @@ pub fn render_map((map, store, ctx): (&mut Map, &Store, &mut BTerm)) {
         ctx.print_color(1, 1, named_color(WHITE), named_color(BLACK), format!("FPS: {}", ctx.fps));
     }
 
-    render_map_layer(map, store, ctx);
+    for _ in (&dirty).iter().filter(|d| d.is_dirty()) {
+        render_map_layer(map, store, ctx);
+    }
+
     render_fps_count(ctx);
 }
 
