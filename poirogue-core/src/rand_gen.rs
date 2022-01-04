@@ -30,3 +30,15 @@ pub fn get_random_from<T>(v: &[T]) -> &T {
     let index = get_random_between(0, v.len() - 1);
     &v[index]
 }
+
+pub fn get_random_sub<T: Clone>(v: &[T], prob: f32) -> Vec<T> {
+    let len = v.len();
+    let mut result = Vec::new();
+    for i in v {
+        if get_random_between(0.0, 1.0) < prob {
+            result.push(i.clone());
+        }
+    }
+
+    result
+}

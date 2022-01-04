@@ -7,6 +7,7 @@ use std::collections::hash_map::RandomState;
 use std::ops::{Add, Range, Sub};
 use multimap::MultiMap;
 use urlencoding::encode;
+use crate::game::Store;
 use crate::map::Map;
 use crate::tiles::{DebugMapTile, RectIndex, RoomIndex, TileIndex, MapTile, DoorState};
 
@@ -41,6 +42,7 @@ pub struct MapGenStorage {
     pub rects_in_room: MultiMap<RoomIndex, Rect>,
     pub door_tiles: Vec<TileIndex>,
     pub room_tiles: MultiMap<RoomIndex, TileIndex>,
+    pub keys: Vec<String>,
 }
 
 pub fn stamp_non_overlapping_rects(config: RectGenConfig, map: &mut Map, storage: &mut MapGenStorage) {
@@ -314,7 +316,17 @@ pub fn remove_weird_doors(map: &mut Map, storage: &mut MapGenStorage) {
     remove_doors_if_crowded(map, storage);
 }
 
-pub fn run_map_gen(w: i32, h: i32) -> (Map, MapGenStorage) {
+pub fn lock_some_doors(map: &mut Map, storage: &mut MapGenStorage, store: &mut Store) {
+    for door in map.get_all_closed_doors() {
+        if get_random_between(0, 100) < 20 {
+            let key = format!("Key #{}", door);
+            store.set(format!("door@{}:requires_lock", door).as_str(), &key);
+            storage.keys.push(key);
+        }
+    }
+}
+
+pub fn run_map_gen(w: i32, h: i32, store: &mut Store) -> (Map, MapGenStorage) {
     let mut map = Map::new(w, h);
     let mut storage = MapGenStorage::default();
 
@@ -326,6 +338,8 @@ pub fn run_map_gen(w: i32, h: i32) -> (Map, MapGenStorage) {
 
     link_neighbors(&mut map, &mut storage);
     remove_weird_doors(&mut map, &mut storage);
+
+    lock_some_doors(&mut map, &mut storage, store);
 
     (map, storage)
 }

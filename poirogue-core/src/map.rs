@@ -1,6 +1,7 @@
 use serde::{Serialize, Deserialize};
 use std::collections::{HashSet, VecDeque};
 use std::collections::hash_set::Iter;
+use std::iter::Filter;
 use std::ops::Mul;
 use bracket_lib::prelude::*;
 use object_pool::Reusable;
@@ -199,6 +200,13 @@ impl Map {
                 *i = MapTile::Door(change(state));
             }
         }
+    }
+
+    pub fn get_all_closed_doors(&self) -> Vec<TileIndex> {
+        self.tiles.iter().enumerate()
+            .filter(|(_, &t)| t == MapTile::Door(DoorState::Closed))
+            .map(|(i, _)| i)
+            .collect::<Vec<TileIndex>>()
     }
 
     pub fn toggle(state: &DoorState) -> DoorState {

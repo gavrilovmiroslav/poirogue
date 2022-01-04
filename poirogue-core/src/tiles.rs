@@ -9,7 +9,7 @@ pub type TileIndex = usize;
 pub type RectIndex = usize;
 pub type RoomIndex = usize;
 
-#[derive(Eq, Serialize, Deserialize, PartialEq, Clone, Debug, Display, Hash)]
+#[derive(Eq, Serialize, Deserialize, PartialEq, Clone, Copy, Debug, Display, Hash)]
 pub enum DoorState {
     Closed, Open,
 }
@@ -23,13 +23,13 @@ impl DoorState {
     }
 }
 
-#[derive(Eq, Serialize, Deserialize, PartialEq, Clone, Debug, Display, Hash)]
+#[derive(Eq, Serialize, Deserialize, PartialEq, Clone, Copy, Debug, Display, Hash)]
 pub enum DebugMapTile {
     Construction(usize),
     RectCenter,
 }
 
-#[derive(Eq, Serialize, Deserialize, PartialEq, Clone, Debug, Display, Hash)]
+#[derive(Eq, Serialize, Deserialize, PartialEq, Clone, Copy, Debug, Display, Hash)]
 pub enum MapTile {
     Debug(DebugMapTile),
     Obscured,

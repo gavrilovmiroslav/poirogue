@@ -21,8 +21,10 @@ mod colors;
 mod core_systems;
 mod json;
 mod store_helpers;
+mod game_systems;
 
-const POSITION_QUERY_REQUEST_QUEUE: &str = "position_query_request_queue";
+const BUMP_INTENT_REQUEST_QUEUE: &str = "position_query_request_queue";
+const UNLOCK_INTENT_REQUEST_QUEUE: &str = "unlock_intent_request_queue";
 
 embedded_resource!(TILE_FONT, "../resources/classic_roguelike_white.png");
 embedded_resource!(IMAGE_FONT, "../resources/MRMOTEXTEX_rexpaintx2.png");

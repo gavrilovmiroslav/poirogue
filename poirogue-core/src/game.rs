@@ -22,19 +22,21 @@ use crate::commands::{ActionCommand, FlowCommand, GameCommand, GameFlow, HackCom
 use crate::input::{InputSnapshotState, InputSnapshot, KeyboardSnapshot, InputSnapshots};
 use crate::map_gen::run_map_gen;
 use crate::murder_gen::generate_murder;
-use crate::{core_systems, POSITION_QUERY_REQUEST_QUEUE, rand_gen};
+use crate::{core_systems, BUMP_INTENT_REQUEST_QUEUE, rand_gen, UNLOCK_INTENT_REQUEST_QUEUE};
 use crate::colors::named_color;
 use crate::entity::{HasFieldOfView, HasGlyph, HasPosition, IsDirty, IsPlayer};
 use crate::glyph::Glyph;
 use crate::json::JsonFields;
 //use crate::entity::{AbstractEntity, Entity};
 use crate::opt::Opt;
-use crate::rand_gen::{get_random_between, get_random_from};
+use crate::rand_gen::{get_random_between, get_random_from, get_random_sub};
 use crate::rex::draw_rex;
 use crate::tiles::{DoorState, MapTile, MapTileRep};
 use crate::render_view::{View};
 use crate::render_view::*;
 use crate::store_helpers::StoreHelpers;
+use crate::game_systems;
+use crate::game_systems::{HasInventory, Item};
 
 pub type Store = PickleDb;
 
@@ -114,7 +116,8 @@ impl GameData {
         }
 
         { /* STORED LISTS */
-            self.store.lcreate(POSITION_QUERY_REQUEST_QUEUE);
+            self.store.lcreate(BUMP_INTENT_REQUEST_QUEUE);
+            self.store.lcreate(UNLOCK_INTENT_REQUEST_QUEUE);
         }
 
         { /* TIME */
@@ -143,18 +146,35 @@ impl GameData {
 
     fn create_new_level(&mut self) {
         self.world.clear();
-        self.store.lregen(POSITION_QUERY_REQUEST_QUEUE);
+        self.store.lregen(BUMP_INTENT_REQUEST_QUEUE);
+        self.store.lregen(UNLOCK_INTENT_REQUEST_QUEUE);
 
-        let (map, storage) = run_map_gen(self.size.0, self.size.1);
+        let (map, storage) = run_map_gen(self.size.0, self.size.1, &mut self.store);
         self.map = map;
 
         let random_center_point = get_random_from(&storage.rects).center();
+
+        // cheat:
+        let keys = {
+            let random_keys = get_random_sub(storage.keys.clone().as_slice(), 0.5);
+            let mut keys = HashSet::new();
+            for key in random_keys {
+                println!("You have {}.", key);
+                keys.insert(key);
+            }
+            println!("You're missing {} keys...", storage.keys.len() - keys.len());
+            keys
+        };
+
+        //let keys = HashSet::new();
+
         self.world.add_entity((
             IsPlayer,
             IsDirty(true),
             HasPosition(random_center_point),
             HasGlyph(Glyph::new('@')),
             HasFieldOfView(Vec::new()),
+            HasInventory(keys)
         ));
     }
 
@@ -174,7 +194,8 @@ impl GameData {
 
                 GameCommand::Flow(FlowCommand::CycleViews) => {
                     let view = self.store.get::<RenderView>("view").unwrap_or(RenderView::Game);
-                    self.store.set::<RenderView>("view", &view.toggle()).expect("Store entry for 'view' updated successfully");
+                    self.store.set("view", &view.toggle()).unwrap();
+                    self.store.set("debug_render_dirty", &true).unwrap();
                 },
 
                 GameCommand::Hack(HackCommand::UnlockAllDoors) => {
@@ -253,24 +274,33 @@ impl GameState for Game {
         let data = &mut self.data;
         let world = &data.world;
 
-        // META STUFF
-
+        // meta
         world.run_with_data(&core_systems::accept_meta_commands, (&data.input, &mut data.commands)).unwrap();
-
-        // ONE FRAME (UPDATING ALL DIRTY STUFF)
-
         world.run_with_data(&core_systems::update_stored_player_position, (&mut data.store));
         world.run_with_data(&core_systems::update_dirty_fovs, (&data.store, &data.map)).unwrap();
-        world.run_with_data(&core_systems::update_revealed_map, &mut data.map).unwrap();
-        world.run_with_data(&core_systems::render_map, (&mut data.map, &data.store, ctx)).unwrap();
+
+        // rendering
+        world.run_with_data(&core_systems::update_player_vision, &mut data.map).unwrap();
+        world.run_with_data(&core_systems::render_map, (&mut data.map, &mut data.store, ctx)).unwrap();
         world.run_with_data(&core_systems::render_entities, (&data.map, ctx)).unwrap();
+        world.run_with_data(&game_systems::render_locked_doors, (&mut data.map, &mut data.store, ctx)).unwrap();
+
+        // cleanup
         world.run(&core_systems::clean_dirty).unwrap();
 
-        // PREP FOR SECOND FRAME (ALL DIRTY IS CLEAN HERE)
+        // input
+        world.run_with_data(&core_systems::interpret_player_bump_controls, (&data.input, &mut data.store)).unwrap();
 
-        world.run_with_data(&core_systems::handle_player_controls, (&data.input, &mut data.store)).unwrap();
-        world.run_with_data(&core_systems::query_position_for_wall_blocking, (&data.map, &mut data.store)).unwrap();
-        world.run_with_data(&core_systems::query_position_for_door_opening, (&mut data.map, &mut data.store)).unwrap();
-        world.run_with_data(&core_systems::handle_move_to_commands, &data.map).unwrap();
+        // bump semantics
+        world.run_with_data(&game_systems::bump__door_unlock_intent, (&mut data.map, &mut data.store)).unwrap();
+        world.run_with_data(&game_systems::bump__open_unlocked_doors, (&mut data.map, &mut data.store)).unwrap();
+        world.run_with_data(&game_systems::bump__default, (&data.map, &mut data.store)).unwrap();
+
+        // unlock semantics
+        world.run_with_data(&game_systems::unlock__if_has_key_for_door, (&mut data.map, &mut data.store)).unwrap();
+        world.run_with_data(&game_systems::unlock__default, &mut data.store).unwrap();
+
+        // resolve directives
+        world.run_with_data(&game_systems::resolve_move_directive, &data.map).unwrap();
     }
 }

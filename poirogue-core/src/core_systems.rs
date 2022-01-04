@@ -1,7 +1,8 @@
+use std::borrow::BorrowMut;
 use std::collections::VecDeque;
 use bracket_color::prelude::{BLACK, WHITE};
 use bracket_lib::prelude::{Algorithm2D, BTerm, field_of_view_set, VirtualKeyCode, Point, Input};
-use shipyard::{AddEntity, AllStoragesViewMut, EntityId, IntoIter, IntoWithId, View, ViewMut, World};
+use shipyard::{AddEntity, AllStoragesViewMut, EntitiesViewMut, EntityId, IntoIter, IntoWithId, View, ViewMut, World};
 use bracket_color::prelude::RGB;
 use serde::{Serialize, Deserialize, Serializer, Deserializer};
 use serde::ser::{Error, SerializeStruct};
@@ -11,7 +12,9 @@ use crate::entity::*;
 use crate::game::{GameData, Store};
 use crate::input::{InputSnapshot, InputSnapshots};
 use crate::map::Map;
-use crate::POSITION_QUERY_REQUEST_QUEUE;
+use crate::{BUMP_INTENT_REQUEST_QUEUE, UNLOCK_INTENT_REQUEST_QUEUE};
+use crate::game_systems::directives::MoveDirective;
+use crate::game_systems::intents::{BumpIntent, UnlockIntent};
 use crate::render_view::RenderView;
 use crate::tiles::{DoorState, MapTile, TileIndex};
 
@@ -55,7 +58,7 @@ pub fn update_dirty_fovs((store, map): (&Store, &Map),
 }
 
 
-pub fn update_revealed_map(map: &mut Map, _: View<IsPlayer>, fovs: View<HasFieldOfView>, dirty: View<IsDirty>) {
+pub fn update_player_vision(map: &mut Map, _: View<IsPlayer>, fovs: View<HasFieldOfView>, dirty: View<IsDirty>) {
     for (fov, _) in (&fovs, &dirty).iter().filter(|(_, d)| d.is_dirty()) {
         map.hide();
         map.show(&fov.0);
@@ -63,21 +66,8 @@ pub fn update_revealed_map(map: &mut Map, _: View<IsPlayer>, fovs: View<HasField
 }
 
 
-#[derive(Serialize, Deserialize)]
-pub struct QueryPositionRequest {
-    pub entity: u64,
-    pub pos: (i32, i32),
-}
-
-#[derive(Serialize, Deserialize)]
-pub enum Motion {
-    Unrest,
-    MoveTo(TileIndex),
-}
-
-
-pub fn handle_player_controls((input, store): (&InputSnapshots, &mut Store),
-                              _: View<IsPlayer>, mut positions: ViewMut<HasPosition>) {
+pub fn interpret_player_bump_controls((input, store): (&InputSnapshots, &mut Store),
+                                      _: View<IsPlayer>, mut positions: ViewMut<HasPosition>) {
 
     for (id, mut has_pos) in (&mut positions).iter().with_id() {
         let keyboard = &input.keyboard;
@@ -90,67 +80,11 @@ pub fn handle_player_controls((input, store): (&InputSnapshots, &mut Store),
         if keyboard.is_pressed(VirtualKeyCode::Right) { new_pos.x += 1; }
 
         if *pos != new_pos {
-            store.ladd(POSITION_QUERY_REQUEST_QUEUE, &QueryPositionRequest { entity: id.inner(), pos: new_pos.to_tuple() });
+            store.ladd(BUMP_INTENT_REQUEST_QUEUE, &BumpIntent { entity: id.inner(), pos: new_pos.to_tuple() });
         }
     }
 }
 
-
-pub fn query_position_for_wall_blocking((map, store): (&Map, &mut Store), mut storage: AllStoragesViewMut) {
-    let mut returns = Vec::new();
-
-    while let Some(item) = store.lpop::<QueryPositionRequest>(POSITION_QUERY_REQUEST_QUEUE, 0) {
-        let index = map.point2d_to_index(Point::from(item.pos));
-
-        if let Some(entity) = EntityId::from_inner(item.entity) {
-            if !map.is_tile_blocked(index) {
-                storage.add_component(entity, (Motion::MoveTo(index), ));
-            } else {
-                returns.push(item);
-            }
-        }
-    }
-
-    if returns.len() > 0 {
-        store.lextend(POSITION_QUERY_REQUEST_QUEUE, &returns);
-    }
-}
-
-
-pub fn query_position_for_door_opening((map, store): (&mut Map, &mut Store), mut storage: AllStoragesViewMut) {
-    let mut returns = Vec::new();
-
-    while let Some(item) = store.lpop::<QueryPositionRequest>(POSITION_QUERY_REQUEST_QUEUE, 0) {
-        let index = map.point2d_to_index(Point::from(item.pos));
-
-        if let Some(entity) = EntityId::from_inner(item.entity) {
-            if let MapTile::Door(DoorState::Closed) = map.tiles[index] {
-                map.tiles[index] = MapTile::Door(DoorState::Open);
-                storage.add_component(entity, (Motion::Unrest,));
-            } else {
-                returns.push(item);
-            }
-        }
-    }
-
-    if returns.len() > 0 {
-        store.lextend(POSITION_QUERY_REQUEST_QUEUE, &returns);
-    }
-}
-
-
-pub fn handle_move_to_commands(map: &Map, mut positions: ViewMut<HasPosition>, mut dirty: ViewMut<IsDirty>, mut motions: ViewMut<Motion>) {
-    for (mut pos, mut dirt, mov) in (&mut positions, &mut dirty, &motions).iter() {
-        if let Motion::MoveTo(index) = mov {
-            let pt = map.index_to_point2d(*index);
-            pos.0 = pt;
-        }
-
-        dirt.mark();
-    }
-
-    motions.clear();
-}
 
 pub fn update_stored_player_position(store: &mut Store, positions: View<HasPosition>, dirty: View<IsDirty>, _: View<IsPlayer>) {
     for (pos, _) in (&positions, &dirty).iter().filter(|(_, d)| d.is_dirty()) {
@@ -158,7 +92,8 @@ pub fn update_stored_player_position(store: &mut Store, positions: View<HasPosit
     }
 }
 
-pub fn render_map((map, store, ctx): (&mut Map, &Store, &mut BTerm), dirty: View<IsDirty>, _: View<IsPlayer>) {
+
+pub fn render_map((map, store, ctx): (&mut Map, &mut Store, &mut BTerm), dirty: View<IsDirty>, _: View<IsPlayer>) {
     fn render_map_layer(map: &mut Map, store: &Store, ctx: &mut BTerm) {
         let view = store.get::<RenderView>("view")
             .unwrap_or(RenderView::Game);
@@ -174,8 +109,17 @@ pub fn render_map((map, store, ctx): (&mut Map, &Store, &mut BTerm), dirty: View
         ctx.print_color(1, 1, named_color(WHITE), named_color(BLACK), format!("FPS: {}", ctx.fps));
     }
 
+    let mut is_player_dirty = false;
     for _ in (&dirty).iter().filter(|d| d.is_dirty()) {
+        is_player_dirty = true;
         render_map_layer(map, store, ctx);
+    }
+
+    if !is_player_dirty {
+        if store.get("debug_render_dirty").unwrap_or(false) {
+            render_map_layer(map, store, ctx);
+            store.rem("debug_render_dirty").unwrap();
+        }
     }
 
     render_fps_count(ctx);
