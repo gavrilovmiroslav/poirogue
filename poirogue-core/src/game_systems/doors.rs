@@ -57,7 +57,7 @@ pub fn bump__door_unlock_intent((map, store): (&mut Map, &mut Store), mut storag
 }
 
 
-pub fn bump__open_unlocked_doors((map, store): (&mut Map, &mut Store), mut storage: AllStoragesViewMut) {
+pub fn bump__open_doors((map, store): (&mut Map, &mut Store), mut storage: AllStoragesViewMut) {
     let mut unhandled = Vec::new();
 
     while let Some(item) = store.lpop::<BumpIntent>(BUMP_INTENT_REQUEST_QUEUE, 0) {

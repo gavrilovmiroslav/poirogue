@@ -8,6 +8,7 @@ use std::ops::{Add, Range, Sub};
 use multimap::MultiMap;
 use urlencoding::encode;
 use crate::game::Store;
+use crate::game_systems::get_required_lock_string;
 use crate::map::Map;
 use crate::tiles::{DebugMapTile, RectIndex, RoomIndex, TileIndex, MapTile, DoorState};
 
@@ -320,7 +321,7 @@ pub fn lock_some_doors(map: &mut Map, storage: &mut MapGenStorage, store: &mut S
     for door in map.get_all_closed_doors() {
         if get_random_between(0, 100) < 20 {
             let key = format!("Key #{}", door);
-            store.set(format!("door@{}:requires_lock", door).as_str(), &key);
+            store.set(get_required_lock_string(door).as_str(), &key);
             storage.keys.push(key);
         }
     }

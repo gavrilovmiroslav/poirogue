@@ -293,7 +293,7 @@ impl GameState for Game {
 
         // bump semantics
         world.run_with_data(&game_systems::bump__door_unlock_intent, (&mut data.map, &mut data.store)).unwrap();
-        world.run_with_data(&game_systems::bump__open_unlocked_doors, (&mut data.map, &mut data.store)).unwrap();
+        world.run_with_data(&game_systems::bump__open_doors, (&mut data.map, &mut data.store)).unwrap();
         world.run_with_data(&game_systems::bump__default, (&data.map, &mut data.store)).unwrap();
 
         // unlock semantics
