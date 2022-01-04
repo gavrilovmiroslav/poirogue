@@ -36,7 +36,7 @@ use crate::render_view::{View};
 use crate::render_view::*;
 use crate::store_helpers::StoreHelpers;
 use crate::game_systems;
-use crate::game_systems::{HasInventory, Item};
+use crate::game_systems::{get_required_lock_string, HasInventory, IsItem, Item};
 
 pub type Store = PickleDb;
 
@@ -146,6 +146,11 @@ impl GameData {
 
     fn create_new_level(&mut self) {
         self.world.clear();
+
+        for door in self.store.get_all().iter().filter(|&k| k.starts_with("door@")).collect::<Vec<&String>>() {
+            self.store.rem(door);
+        }
+
         self.store.lregen(BUMP_INTENT_REQUEST_QUEUE);
         self.store.lregen(UNLOCK_INTENT_REQUEST_QUEUE);
 
@@ -154,19 +159,15 @@ impl GameData {
 
         let random_center_point = get_random_from(&storage.rects).center();
 
-        // cheat:
-        let keys = {
-            let random_keys = get_random_sub(storage.keys.clone().as_slice(), 0.5);
-            let mut keys = HashSet::new();
-            for key in random_keys {
-                println!("You have {}.", key);
-                keys.insert(key);
-            }
-            println!("You're missing {} keys...", storage.keys.len() - keys.len());
-            keys
-        };
+        for key in storage.keys {
+            let pt = get_random_from(&storage.rects).center();
 
-        //let keys = HashSet::new();
+            let entity = self.world.add_entity((
+                IsItem{ item: key.clone(), is_collected: false },
+                HasPosition(pt.clone()),
+                HasGlyph(Glyph::new('(')),
+            ));
+        }
 
         self.world.add_entity((
             IsPlayer,
@@ -174,7 +175,7 @@ impl GameData {
             HasPosition(random_center_point),
             HasGlyph(Glyph::new('@')),
             HasFieldOfView(Vec::new()),
-            HasInventory(keys)
+            HasInventory(HashSet::new()),
         ));
     }
 
@@ -254,7 +255,7 @@ impl Game {
         game.data.commands.push_back(GameCommand::Flow(FlowCommand::ReloadViewConfigs));
         game.data.commands.push_back(GameCommand::Flow(FlowCommand::GenerateLevel));
 
-        main_loop(term,game).unwrap();
+        main_loop(term, game).unwrap();
     }
 
     fn update_time(&mut self) {
@@ -294,6 +295,7 @@ impl GameState for Game {
         // bump semantics
         world.run_with_data(&game_systems::bump__door_unlock_intent, (&mut data.map, &mut data.store)).unwrap();
         world.run_with_data(&game_systems::bump__open_doors, (&mut data.map, &mut data.store)).unwrap();
+        world.run_with_data(&game_systems::bump__collect_items, (&mut data.map, &mut data.store)).unwrap();
         world.run_with_data(&game_systems::bump__default, (&data.map, &mut data.store)).unwrap();
 
         // unlock semantics
