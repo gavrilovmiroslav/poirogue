@@ -152,6 +152,11 @@ pub fn handle_move_to_commands(map: &Map, mut positions: ViewMut<HasPosition>, m
     motions.clear();
 }
 
+pub fn update_stored_player_position(store: &mut Store, positions: View<HasPosition>, dirty: View<IsDirty>, _: View<IsPlayer>) {
+    for (pos, _) in (&positions, &dirty).iter().filter(|(_, d)| d.is_dirty()) {
+        store.set("player_position", &(pos.0.x, pos.0.y)).unwrap();
+    }
+}
 
 pub fn render_map((map, store, ctx): (&mut Map, &Store, &mut BTerm)) {
     fn render_map_layer(map: &mut Map, store: &Store, ctx: &mut BTerm) {

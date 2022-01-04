@@ -165,7 +165,7 @@ impl Map {
                             dx * dx + dy * dy
                         } / 100.0).clamp(0.0, 1.0) * 0.25;
 
-                        let time = store.get::<f32>("time").unwrap_or(0.0);
+                        let time = store.get::<f32>("time").unwrap() * 0.01;
 
                         let speed = 0.5 + noise[index];
                         let norm = f32::sin(time * speed) + 1.0;                              // 0 .. 1
@@ -176,11 +176,10 @@ impl Map {
                                               view.get_color(tile)
                                                   .hue_shift(f32::sin((time + noise[index]) * 0.01) + 1.0)
                                                   .darken(dist * 1.5)
-                                                  .lighten(sin * 0.5)
                                                   .desaturate(-dist * 1.5)
                                           } else {
                                               view.get_color(tile)
-                                                  .darken(sin)
+                                                  .darken(0.25)
                                                   .darken(dist)
                                                   .desaturate(-dist * 2.0)
                                           }, named_color(BLACK)));

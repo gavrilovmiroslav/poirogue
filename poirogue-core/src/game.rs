@@ -34,6 +34,7 @@ use crate::rex::draw_rex;
 use crate::tiles::{DoorState, MapTile, MapTileRep};
 use crate::render_view::{View};
 use crate::render_view::*;
+use crate::store_helpers::StoreHelpers;
 
 pub type Store = PickleDb;
 
@@ -141,11 +142,14 @@ impl GameData {
     }
 
     fn create_new_level(&mut self) {
+        self.world.clear();
+        self.store.lregen(POSITION_QUERY_REQUEST_QUEUE);
+
         let (map, storage) = run_map_gen(self.size.0, self.size.1);
         self.map = map;
 
         let random_center_point = get_random_from(&storage.rects).center();
-        self.world.borrow_mut().add_entity((
+        self.world.add_entity((
             IsPlayer,
             IsDirty(true),
             HasPosition(random_center_point),
@@ -255,6 +259,7 @@ impl GameState for Game {
 
         // ONE FRAME (UPDATING ALL DIRTY STUFF)
 
+        world.run_with_data(&core_systems::update_stored_player_position, (&mut data.store));
         world.run_with_data(&core_systems::update_dirty_fovs, (&data.store, &data.map)).unwrap();
         world.run_with_data(&core_systems::update_revealed_map, &mut data.map).unwrap();
         world.run_with_data(&core_systems::render_map, (&mut data.map, &data.store, ctx)).unwrap();

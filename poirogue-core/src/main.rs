@@ -20,6 +20,7 @@ mod entity;
 mod colors;
 mod core_systems;
 mod json;
+mod store_helpers;
 
 const POSITION_QUERY_REQUEST_QUEUE: &str = "position_query_request_queue";
 
