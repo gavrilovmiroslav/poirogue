@@ -23,9 +23,6 @@ mod json;
 mod store_helpers;
 mod game_systems;
 
-const BUMP_INTENT_REQUEST_QUEUE: &str = "position_query_request_queue";
-const UNLOCK_INTENT_REQUEST_QUEUE: &str = "unlock_intent_request_queue";
-
 embedded_resource!(TILE_FONT, "../resources/classic_roguelike_white.png");
 embedded_resource!(IMAGE_FONT, "../resources/MRMOTEXTEX_rexpaintx2.png");
 embedded_resource!(TEXT_FONT, "../resources/8x8glyphs.png");
