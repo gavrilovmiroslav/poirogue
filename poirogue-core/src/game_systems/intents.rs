@@ -1,15 +1,13 @@
+use bracket_lib::prelude::Point;
 use crate::tiles::TileIndex;
-use serde::{Serialize, Deserialize};
+use shipyard::EntityId;
 
-#[derive(Serialize, Deserialize)]
 pub struct BumpIntent {
-    pub entity: u64,
-    pub pos: (i32, i32),
+    pub bumper: EntityId,
+    pub pos: Point,
 }
 
-#[derive(Serialize, Deserialize)]
 pub struct UnlockIntent {
-    pub entity: u64,
-    pub tile: TileIndex,
+    pub entity: EntityId,
+    pub target: EntityId,
 }
-

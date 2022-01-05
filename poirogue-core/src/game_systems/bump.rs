@@ -1,18 +1,20 @@
 use bracket_lib::prelude::{Algorithm2D, Point};
-use shipyard::{AllStoragesViewMut, EntityId};
-use crate::BUMP_INTENT_REQUEST_QUEUE;
+use shipyard::{AddEntity, AllStoragesViewMut, EntitiesViewMut, EntityId, IntoIter, IntoWithId, ViewMut};
 use crate::game::Store;
 use crate::game_systems::{BumpIntent, MoveDirective};
 use crate::map::Map;
 
-pub fn bump__default((map, store): (&Map, &mut Store), mut storage: AllStoragesViewMut) {
-    while let Some(bump) = store.lpop::<BumpIntent>(BUMP_INTENT_REQUEST_QUEUE, 0) {
-        let index = map.point2d_to_index(Point::from(bump.pos));
+pub fn bump__default(map: &Map,
+                     mut bump_intents: ViewMut<BumpIntent>,
+                     mut moves: ViewMut<MoveDirective>,) {
 
-        if let Some(bumper_id) = EntityId::from_inner(bump.entity) {
-            if !map.is_tile_blocked(index) {
-                storage.add_component(bumper_id, (MoveDirective::MoveTo(index),));
-            }
+    for bump in (&bump_intents).iter() {
+        let tile = map.point2d_to_index(bump.pos);
+
+        if !map.is_tile_blocked(tile) {
+            moves.add_entity(bump.bumper, MoveDirective(bump.pos));
         }
     }
+
+    bump_intents.clear();
 }

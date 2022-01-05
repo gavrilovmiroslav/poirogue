@@ -3,7 +3,6 @@ use std::collections::HashSet;
 use std::ops::Index;
 use bracket_lib::prelude::{Point, Algorithm2D};
 use shipyard::{AddEntity, AllStoragesViewMut, EntityId, Get, IntoIter, IntoWithId, Not, Remove, View, ViewMut};
-use crate::BUMP_INTENT_REQUEST_QUEUE;
 use crate::entity::{HasPosition, IsInvisible};
 use crate::game::Store;
 use crate::game_systems::{BumpIntent, MoveDirective};
@@ -30,7 +29,7 @@ pub fn bump__collect_items((map, store): (&mut Map, &mut Store),
                            mut is_invisible: ViewMut<IsInvisible>,
                            mut carries: ViewMut<CarriesItem>,) {
 
-    let mut unhandled = Vec::new();
+/*    let mut unhandled = Vec::new();
     let mut handled = false;
 
     while let Some(bump) = store.lpop::<BumpIntent>(BUMP_INTENT_REQUEST_QUEUE, 0) {
@@ -69,5 +68,5 @@ pub fn bump__collect_items((map, store): (&mut Map, &mut Store),
 
     if unhandled.len() > 0 {
         store.lextend(BUMP_INTENT_REQUEST_QUEUE, &unhandled);
-    }
+    }*/
 }

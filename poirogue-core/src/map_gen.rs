@@ -8,9 +8,8 @@ use std::ops::{Add, Range, Sub};
 use multimap::MultiMap;
 use urlencoding::encode;
 use crate::game::Store;
-use crate::game_systems::get_required_lock_string;
 use crate::map::Map;
-use crate::tiles::{DebugMapTile, RectIndex, RoomIndex, TileIndex, MapTile, DoorState};
+use crate::tiles::{DebugMapTile, RectIndex, RoomIndex, TileIndex, MapTile};
 
 pub struct RectGenConfig {
     pub creation_attempts: i32,
@@ -215,7 +214,7 @@ pub fn link_neighbors(map: &mut Map, storage: &mut MapGenStorage) {
 
                 if !door_candidates.is_empty() {
                     let door = door_candidates[get_random_between(0, door_candidates.len())];
-                    map.set_at_tile_index(door, MapTile::Door(DoorState::Closed));
+                    map.set_at_tile_index(door, MapTile::Door);
                     storage.door_tiles.push(door);
                 }
             }
@@ -256,9 +255,7 @@ pub fn remove_weird_doors(map: &mut Map, storage: &mut MapGenStorage) {
 
     fn is_corridor_or_door(map: &Map, pt: Point) -> bool {
         let tile = map.point2d_to_index(pt);
-        map.is_tile(tile, MapTile::Corridor) ||
-            map.is_tile(tile, MapTile::Door(DoorState::Closed)) ||
-            map.is_tile(tile, MapTile::Door(DoorState::Open))
+        map.is_tile(tile, MapTile::Corridor) || map.is_tile(tile, MapTile::Door)
     }
 
     fn is_room(map: &Map, pt: Point) -> bool {
@@ -317,16 +314,6 @@ pub fn remove_weird_doors(map: &mut Map, storage: &mut MapGenStorage) {
     remove_doors_if_crowded(map, storage);
 }
 
-pub fn lock_some_doors(map: &mut Map, storage: &mut MapGenStorage, store: &mut Store) {
-    for door in map.get_all_closed_doors() {
-        if get_random_between(0, 100) < 20 {
-            let key = format!("Key #{}", door);
-            store.set(get_required_lock_string(door).as_str(), &key);
-            storage.keys.push(key);
-        }
-    }
-}
-
 pub fn run_map_gen(w: i32, h: i32, store: &mut Store) -> (Map, MapGenStorage) {
     let mut map = Map::new(w, h);
     let mut storage = MapGenStorage::default();
@@ -339,8 +326,6 @@ pub fn run_map_gen(w: i32, h: i32, store: &mut Store) -> (Map, MapGenStorage) {
 
     link_neighbors(&mut map, &mut storage);
     remove_weird_doors(&mut map, &mut storage);
-
-    lock_some_doors(&mut map, &mut storage, store);
 
     (map, storage)
 }

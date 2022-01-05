@@ -2,6 +2,7 @@ use std::str;
 use std::borrow::{Borrow, BorrowMut};
 use std::cell::RefCell;
 use std::collections::{HashSet, VecDeque};
+use std::collections::hash_map::RandomState;
 use std::fs;
 use std::ops::Deref;
 use std::path::Path;
@@ -22,8 +23,9 @@ use crate::commands::{ActionCommand, FlowCommand, GameCommand, GameFlow, HackCom
 use crate::input::{InputSnapshotState, InputSnapshot, KeyboardSnapshot, InputSnapshots};
 use crate::map_gen::run_map_gen;
 use crate::murder_gen::generate_murder;
-use crate::{core_systems, BUMP_INTENT_REQUEST_QUEUE, rand_gen, UNLOCK_INTENT_REQUEST_QUEUE};
+use crate::{core_systems, rand_gen};
 use crate::colors::named_color;
+use crate::core_systems::IsCharacter;
 use crate::entity::{HasFieldOfView, HasGlyph, HasPosition, IsDirty, IsPlayer};
 use crate::glyph::Glyph;
 use crate::json::JsonFields;
@@ -31,12 +33,12 @@ use crate::json::JsonFields;
 use crate::opt::Opt;
 use crate::rand_gen::{get_random_between, get_random_from, get_random_sub};
 use crate::rex::draw_rex;
-use crate::tiles::{DoorState, MapTile, MapTileRep};
+use crate::tiles::{MapTile, MapTileRep, TileIndex};
 use crate::render_view::{View};
 use crate::render_view::*;
 use crate::store_helpers::StoreHelpers;
 use crate::game_systems;
-use crate::game_systems::{get_required_lock_string, HasInventory, IsItem, Item};
+use crate::game_systems::{HasInventory, IsDoor, IsItem, IsLocked, Item, ItemSpendMode};
 
 pub type Store = PickleDb;
 
@@ -115,11 +117,6 @@ impl GameData {
                 .expect("Failed storing noise map");
         }
 
-        { /* STORED LISTS */
-            self.store.lcreate(BUMP_INTENT_REQUEST_QUEUE);
-            self.store.lcreate(UNLOCK_INTENT_REQUEST_QUEUE);
-        }
-
         { /* TIME */
             self.store.set("time", &0.0);
         }
@@ -147,32 +144,41 @@ impl GameData {
     fn create_new_level(&mut self) {
         self.world.clear();
 
-        for door in self.store.get_all().iter().filter(|&k| k.starts_with("door@")).collect::<Vec<&String>>() {
-            self.store.rem(door);
-        }
-
-        self.store.lregen(BUMP_INTENT_REQUEST_QUEUE);
-        self.store.lregen(UNLOCK_INTENT_REQUEST_QUEUE);
-
         let (map, storage) = run_map_gen(self.size.0, self.size.1, &mut self.store);
         self.map = map;
 
-        let random_center_point = get_random_from(&storage.rects).center();
+        let all_doors = self.map.get_all_doors().as_slice().to_vec();
+        let some_doors: HashSet<TileIndex, RandomState> = HashSet::from_iter(get_random_sub(self.map.get_all_doors().as_slice(), 0.5));
 
-        for key in storage.keys {
-            let pt = get_random_from(&storage.rects).center();
-
-            let entity = self.world.add_entity((
-                IsItem{ item: key.clone(), is_collected: false },
-                HasPosition(pt.clone()),
-                HasGlyph(Glyph::new('(')),
+        for door in all_doors {
+            let pos = self.map.index_to_point2d(door);
+            let mut door_entity = self.world.add_entity((
+                IsDoor(true),
+                HasPosition(pos),
+                HasGlyph(Glyph::new('+')),
             ));
+
+            if some_doors.contains(&door) {
+                let pt = get_random_from(&storage.rects).center();
+                let key = format!("Key for {}", door);
+                let key_entity = self.world.add_entity((
+                    IsItem{ item: key.clone(), is_collected: false },
+                    HasPosition(pt.clone()),
+                    HasGlyph(Glyph::new('(')),
+                ));
+
+                self.world.add_component(door_entity, (IsLocked(key_entity, ItemSpendMode::Consume),));
+                println!("Added {} to the world at ({}, {})", key, pt.x, pt.y);
+            }
         }
+
+        let starting_pos = get_random_from(&storage.rects).center();
 
         self.world.add_entity((
             IsPlayer,
-            IsDirty(true),
-            HasPosition(random_center_point),
+            IsCharacter,
+            IsDirty,
+            HasPosition(starting_pos),
             HasGlyph(Glyph::new('@')),
             HasFieldOfView(Vec::new()),
             HasInventory(HashSet::new()),
@@ -197,14 +203,6 @@ impl GameData {
                     let view = self.store.get::<RenderView>("view").unwrap_or(RenderView::Game);
                     self.store.set("view", &view.toggle()).unwrap();
                     self.store.set("debug_render_dirty", &true).unwrap();
-                },
-
-                GameCommand::Hack(HackCommand::UnlockAllDoors) => {
-                    self.map.iter_all_doors(&Map::open);
-                },
-
-                GameCommand::Hack(HackCommand::LockAllDoors) => {
-                    self.map.iter_all_doors(&Map::close);
                 },
 
                 _ => {}
@@ -283,26 +281,26 @@ impl GameState for Game {
         // rendering
         world.run_with_data(&core_systems::update_player_vision, &mut data.map).unwrap();
         world.run_with_data(&core_systems::render_map, (&mut data.map, &mut data.store, ctx)).unwrap();
-        world.run_with_data(&core_systems::render_entities, (&data.map, ctx)).unwrap();
-        world.run_with_data(&game_systems::render_locked_doors, (&mut data.map, &mut data.store, ctx)).unwrap();
+        world.run_with_data(&game_systems::render_doors, (&mut data.map, ctx)).unwrap();
+        world.run_with_data(&core_systems::render_characters, (&data.map, ctx)).unwrap();
 
         // cleanup
         world.run(&core_systems::clean_dirty).unwrap();
 
         // input
-        world.run_with_data(&core_systems::interpret_player_bump_controls, (&data.input, &mut data.store)).unwrap();
+        world.run_with_data(&core_systems::interpret_player_bump_controls, &data.input).unwrap();
 
         // bump semantics
-        world.run_with_data(&game_systems::bump__door_unlock_intent, (&mut data.map, &mut data.store)).unwrap();
-        world.run_with_data(&game_systems::bump__open_doors, (&mut data.map, &mut data.store)).unwrap();
+        world.run(&game_systems::bump__interpret_as_door_unlock_intent).unwrap();
+        world.run_with_data(&game_systems::bump__open_doors, &mut data.map).unwrap();
         world.run_with_data(&game_systems::bump__collect_items, (&mut data.map, &mut data.store)).unwrap();
-        world.run_with_data(&game_systems::bump__default, (&data.map, &mut data.store)).unwrap();
+        world.run_with_data(&game_systems::bump__default, &data.map).unwrap();
 
         // unlock semantics
-        world.run_with_data(&game_systems::unlock__if_has_key_for_door, (&mut data.map, &mut data.store)).unwrap();
-        world.run_with_data(&game_systems::unlock__default, &mut data.store).unwrap();
+        world.run(&game_systems::unlock__if_has_key_for_door).unwrap();
+        world.run(&game_systems::unlock__default).unwrap();
 
         // resolve directives
-        world.run_with_data(&game_systems::resolve_move_directive, &data.map).unwrap();
+        world.run_with_data(&game_systems::resolve_move_directives, &data.map).unwrap();
     }
 }

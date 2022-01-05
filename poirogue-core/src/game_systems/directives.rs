@@ -1,27 +1,20 @@
 use bracket_lib::prelude::{Point, Algorithm2D};
 use crate::tiles::TileIndex;
 use serde::{Serialize, Deserialize};
-use shipyard::{IntoIter, ViewMut};
+use shipyard::{AddEntity, IntoIter, ViewMut, IntoWithId};
 use crate::entity::{HasPosition, IsDirty};
 use crate::map::Map;
 
-#[derive(Serialize, Deserialize)]
-pub enum MoveDirective {
-    MoveBy(i32, i32),
-    MoveTo(TileIndex),
-}
+pub struct MoveDirective(pub Point);
 
-pub fn resolve_move_directive(map: &Map, mut positions: ViewMut<HasPosition>, mut dirty: ViewMut<IsDirty>, mut move_dirs: ViewMut<MoveDirective>) {
-    for (mut pos, mut dirt, mov) in (&mut positions, &mut dirty, &move_dirs).iter() {
-        use MoveDirective::*;
+pub fn resolve_move_directives(map: &Map,
+                               mut positions: ViewMut<HasPosition>,
+                               mut dirty: ViewMut<IsDirty>,
+                               mut move_dirs: ViewMut<MoveDirective>) {
 
-        let new_pos = match mov {
-            MoveTo(index) => map.index_to_point2d(*index),
-            MoveBy(dx, dy) => pos.0 + Point::from((*dx, *dy)),
-        };
-
-        pos.0 = new_pos;
-        dirt.mark();
+    for (id, (mut pos, mov)) in (&mut positions, &move_dirs).iter().with_id() {
+        pos.0 = mov.0;
+        dirty.add_entity(id, IsDirty);
     }
 
     move_dirs.clear();

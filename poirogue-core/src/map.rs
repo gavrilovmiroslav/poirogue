@@ -6,9 +6,8 @@ use std::ops::Mul;
 use bracket_lib::prelude::*;
 use object_pool::Reusable;
 use crate::commands::GameCommand;
-use crate::tiles::{DoorState, MapTile, TileIndex};
+use crate::tiles::{MapTile, TileIndex};
 use crate::render_view::{View};
-use crate::tiles::DoorState::Open;
 use lru::{LruCache};
 use lazy_static::*;
 use std::sync::Mutex;
@@ -194,31 +193,11 @@ impl Map {
         render_draw_buffer(ctx).unwrap();
     }
 
-    pub fn iter_all_doors(&mut self, change: &dyn Fn(&DoorState) -> DoorState) {
-        for i in &mut self.tiles {
-            if let MapTile::Door(state) = i {
-                *i = MapTile::Door(change(state));
-            }
-        }
-    }
-
-    pub fn get_all_closed_doors(&self) -> Vec<TileIndex> {
+    pub fn get_all_doors(&self) -> Vec<TileIndex> {
         self.tiles.iter().enumerate()
-            .filter(|(_, &t)| t == MapTile::Door(DoorState::Closed))
+            .filter(|(_, &t)| t == MapTile::Door)
             .map(|(i, _)| i)
             .collect::<Vec<TileIndex>>()
-    }
-
-    pub fn toggle(state: &DoorState) -> DoorState {
-        state.toggle()
-    }
-
-    pub fn close(_state: &DoorState) -> DoorState {
-        DoorState::Closed
-    }
-
-    pub fn open(_state: &DoorState) -> DoorState {
-        DoorState::Open
     }
 }
 

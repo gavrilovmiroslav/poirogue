@@ -1,123 +1,139 @@
-use bracket_color::prelude::BLACK;
-use bracket_lib::prelude::{Point, Algorithm2D, BTerm, RED, DARK_RED};
-use shipyard::{AllStoragesViewMut, EntityId, Get, View, ViewMut};
-use crate::{BUMP_INTENT_REQUEST_QUEUE, UNLOCK_INTENT_REQUEST_QUEUE};
+use bracket_color::prelude::{BLACK, WHITE};
+use bracket_lib::prelude::{Point, Algorithm2D, BTerm, RED, DARK_RED, DARK_GRAY};
+use shipyard::{AddEntity, AllStoragesViewMut, EntitiesViewMut, EntityId, Get, IntoIter, IntoWithId, Remove, View, ViewMut};
 use crate::colors::named_color;
-use crate::entity::IsDirty;
+use crate::entity::{HasGlyph, HasPosition, IsDirty};
 use crate::game::Store;
 use crate::game_systems::directives::MoveDirective;
-use crate::game_systems::HasInventory;
+use crate::game_systems::{CarriesItem, HasInventory};
 use crate::game_systems::intents::{BumpIntent, UnlockIntent};
 use crate::map::Map;
 use crate::store_helpers::StoreHelpers;
-use crate::tiles::{DoorState, MapTile, TileIndex};
+use crate::tiles::{MapTile, TileIndex};
 
-pub fn get_required_lock_string(index: TileIndex) -> String {
-    format!("door@{}:requires_lock", index)
-}
+pub struct IsDoor(pub bool);
 
-pub fn render_locked_doors((map, store, ctx): (&mut Map, &mut Store, &mut BTerm)) {
-    for door in map.get_all_closed_doors() {
-         if store.exists(get_required_lock_string(door).as_str()) {
-             let pt = map.index_to_point2d(door);
-             if map.is_tile_revealed(door) {
-                 if map.is_tile_visible(door) {
-                     ctx.print_color(pt.x, pt.y, named_color(RED), named_color(BLACK), '+');
-                 } else {
-                     ctx.print_color(pt.x, pt.y, named_color(DARK_RED), named_color(BLACK), '+');
-                 }
-             }
-         }
+#[derive(Clone, Eq, PartialEq)]
+pub enum ItemSpendMode { Consume, Retain, }
+
+pub struct IsLocked(pub EntityId, pub ItemSpendMode);
+
+pub fn render_doors((map, ctx): (&mut Map, &mut BTerm),
+                    doors: View<IsDoor>,
+                    has_position: View<HasPosition>,
+                    has_glyph: View<HasGlyph>,
+                    is_locked: View<IsLocked>) {
+
+    for (_, pos, glyph, _) in (&doors, &has_position, &has_glyph, !&is_locked).iter() {
+        let tile = map.point2d_to_index(Point::from(pos.0));
+        let fg = if map.is_tile_visible(tile) { glyph.0.fg } else { named_color(DARK_GRAY) };
+
+        if map.is_tile_revealed(tile) {
+            ctx.print_color(pos.0.x, pos.0.y, fg, named_color(BLACK),  glyph.0.ch);
+        }
+    }
+
+    for (_, pos, glyph, _) in (&doors, &has_position, &has_glyph, &is_locked).iter() {
+        let tile = map.point2d_to_index(Point::from(pos.0));
+        let fg = if map.is_tile_visible(tile) { named_color(RED) } else { named_color(DARK_RED) };
+
+        if map.is_tile_revealed(tile) {
+            ctx.print_color(pos.0.x, pos.0.y, fg, named_color(BLACK), glyph.0.ch);
+        }
     }
 }
 
 
-pub fn bump__door_unlock_intent((map, store): (&mut Map, &mut Store), mut storage: AllStoragesViewMut) {
-    let mut unhandled = Vec::new();
+pub fn bump__interpret_as_door_unlock_intent(doors: View<IsDoor>,
+                                             locked: View<IsLocked>,
+                                             has_position: View<HasPosition>,
+                                             mut bump_intents: ViewMut<BumpIntent>,
+                                             mut unlock_intents: ViewMut<UnlockIntent>,
+                                             mut entities: EntitiesViewMut,) {
 
-    while let Some(item) = store.lpop::<BumpIntent>(BUMP_INTENT_REQUEST_QUEUE, 0) {
-        let index = map.point2d_to_index(Point::from(item.pos));
+    let mut handled = Vec::new();
+    for (bump_id, bump) in (&bump_intents).iter().with_id() {
+        let pt = Point::from(bump.pos);
 
-        if let Some(entity) = EntityId::from_inner(item.entity) {
-            if let MapTile::Door(DoorState::Closed) = map.tiles[index] {
-                if store.exists(get_required_lock_string(index).as_str()) {
-                    store.ladd(UNLOCK_INTENT_REQUEST_QUEUE, &UnlockIntent { entity: item.entity, tile: index });
-                } else {
-                    unhandled.push(item);
-                }
-            } else {
-                unhandled.push(item);
+        for (door_id, (door, _, _)) in (&doors, &locked, &has_position).iter().with_id()
+            .filter(|(_, (_, _, p))| p.0 == pt) {
+
+            entities.add_entity((&mut unlock_intents, ), (UnlockIntent { entity: bump.bumper, target: door_id }, ));
+            handled.push(bump_id);
+        }
+    }
+
+    for id in handled {
+        bump_intents.remove(id);
+    }
+}
+
+
+pub fn bump__open_doors(map: &mut Map,
+                        has_position: View<HasPosition>,
+                        mut doors: ViewMut<IsDoor>,
+                        mut locked: ViewMut<IsLocked>,
+                        mut has_glyph: ViewMut<HasGlyph>,
+                        mut bump_intents: ViewMut<BumpIntent>,
+                        mut dirty: ViewMut<IsDirty>) {
+
+    let mut handled = Vec::new();
+    for (bump_id, bump) in (&bump_intents).iter().with_id() {
+        let index = map.point2d_to_index(bump.pos);
+
+        for (id, (_, mut door, mut glyph, has_pos)) in (!&locked, &mut doors, &mut has_glyph, &has_position).iter().with_id()
+            .filter(|(_, (_, d, _, p))| d.0 && p.0 == bump.pos) {
+
+            door.0 = false;
+            glyph.0.ch = '_';
+            glyph.0.fg = named_color(DARK_GRAY);
+            map.set_at_tile_index(index, MapTile::Corridor);
+
+            dirty.add_entity(bump.bumper, IsDirty);
+            handled.push(bump_id);
+        }
+    }
+
+    for id in handled {
+        bump_intents.remove(id);
+    }
+}
+
+
+pub fn unlock__if_has_key_for_door(mut carries: ViewMut<CarriesItem>,
+                                   mut is_locked: ViewMut<IsLocked>,
+                                   mut unlock_intents: ViewMut<UnlockIntent>,) {
+
+    let mut handled = Vec::new();
+
+    for (unlock_intent_id, unlock) in (&unlock_intents).iter().with_id() {
+        let owner_id = unlock.target;
+
+        for (lock_id, mut lock) in (&mut is_locked).iter().with_id()
+            .filter(|(id, _)| unlock.target == *id) {
+
+            let key_id = lock.0;
+
+            for (carry_id, _) in (&carries).iter().with_id()
+                .filter(|(_, c)| c.owner == owner_id && c.item == key_id) {
+
+                handled.push((unlock_intent_id, carry_id, lock_id, lock.1.clone()));
             }
         }
     }
 
-    if unhandled.len() > 0 {
-        store.lextend(BUMP_INTENT_REQUEST_QUEUE, &unhandled);
+    for (unlock_id, carry_id, lock_id, key_spent) in handled {
+        unlock_intents.remove(unlock_id);
+
+        if key_spent == ItemSpendMode::Consume { // separate intent
+            carries.remove(carry_id);
+        }
+
+        is_locked.remove(lock_id);
     }
 }
 
 
-pub fn bump__open_doors((map, store): (&mut Map, &mut Store), mut storage: AllStoragesViewMut) {
-    let mut unhandled = Vec::new();
-
-    while let Some(item) = store.lpop::<BumpIntent>(BUMP_INTENT_REQUEST_QUEUE, 0) {
-        let index = map.point2d_to_index(Point::from(item.pos));
-
-        if let Some(entity) = EntityId::from_inner(item.entity) {
-            if let MapTile::Door(DoorState::Closed) = map.tiles[index] {
-                map.tiles[index] = MapTile::Door(DoorState::Open);
-                storage.add_component(entity, (MoveDirective::MoveBy(0, 0), ));
-            } else {
-                unhandled.push(item);
-            }
-        }
-    }
-
-    if unhandled.len() > 0 {
-        store.lextend(BUMP_INTENT_REQUEST_QUEUE, &unhandled);
-    }
-}
-
-
-pub fn unlock__if_has_key_for_door((map, store): (&mut Map, &mut Store), mut storage: AllStoragesViewMut) {
-    let mut unhandled = Vec::new();
-
-    while let Some(item) = store.lpop::<UnlockIntent>(UNLOCK_INTENT_REQUEST_QUEUE, 0) {
-        let index = item.tile;
-        let mut handled = false;
-
-        if let Some(entity) = EntityId::from_inner(item.entity) {
-            let required_lock = get_required_lock_string(index);
-            let required_key = store.get(required_lock.as_str()).unwrap_or("".to_string());
-            let (mut has_inventory, mut is_dirty) = storage.borrow::<(ViewMut<HasInventory>, ViewMut<IsDirty>)>().unwrap();
-
-            if let Ok((mut inventory, mut dirt)) = (&mut has_inventory, &mut is_dirty).get(entity) {
-                if let MapTile::Door(DoorState::Closed) = map.tiles[index] {
-                    if inventory.0.contains(&required_key) {
-                        println!("You use {} to unlock the door. The key crumbles to dust.", required_key);
-                        inventory.0.remove(&required_key);
-                        store.rem(required_lock.as_str());
-                        map.tiles[index] = MapTile::Door(DoorState::Open);
-                        dirt.mark();
-                        handled = true;
-                    } else {
-                        println!("The door is locked. {} is required to unlock it.", required_key);
-                    }
-                }
-            }
-        }
-
-        if !handled {
-            unhandled.push(item);
-        }
-    }
-
-    if unhandled.len() > 0 {
-        store.lextend(UNLOCK_INTENT_REQUEST_QUEUE, &unhandled);
-    }
-}
-
-
-pub fn unlock__default(store: &mut Store) {
-    store.lregen(UNLOCK_INTENT_REQUEST_QUEUE);
+pub fn unlock__default(mut unlock_intents: ViewMut<UnlockIntent>) {
+    unlock_intents.clear();
 }

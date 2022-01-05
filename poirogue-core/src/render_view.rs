@@ -3,7 +3,7 @@ use std::ops::Mul;
 use serde::{Serialize, Deserialize};
 use serde::ser::{Serializer, SerializeMap};
 use crate::rand_gen::get_random_between;
-use crate::tiles::{DebugMapTile, DoorState, get_from_rep, MapTile, MapTileRep};
+use crate::tiles::{DebugMapTile, get_from_rep, MapTile, MapTileRep};
 use lru::{DefaultHasher, LruCache};
 use lazy_static::*;
 use std::sync::Mutex;
@@ -76,7 +76,7 @@ impl View for RenderView {
             MapTile::Floor(_) => "Room",
             MapTile::Stairs => "Stairs",
             MapTile::Corridor => "Corridor",
-            MapTile::Door(_) => "Door",
+            MapTile::Door => "Door",
         }.to_string()
     }
 
@@ -99,8 +99,7 @@ impl View for RenderView {
                     MapTile::Debug(_) => '!',
                     MapTile::Obscured => '#',
                     MapTile::Floor(_) | MapTile::Corridor => '.',
-                    MapTile::Door(DoorState::Closed) => '+',
-                    MapTile::Door(DoorState::Open) => '-',
+                    MapTile::Door => '+',
                     MapTile::Stairs => '>',
                 }
             }
@@ -112,8 +111,7 @@ impl View for RenderView {
 
                     MapTile::Obscured => ' ',
                     MapTile::Floor(n) => (64 + *n as u8) as char,
-                    MapTile::Door(DoorState::Closed) => '+',
-                    MapTile::Door(DoorState::Open) => '-',
+                    MapTile::Door => '+',
                     MapTile::Corridor => '.',
                     MapTile::Stairs => '>',
                 }

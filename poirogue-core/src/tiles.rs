@@ -10,20 +10,6 @@ pub type RectIndex = usize;
 pub type RoomIndex = usize;
 
 #[derive(Eq, Serialize, Deserialize, PartialEq, Clone, Copy, Debug, Display, Hash)]
-pub enum DoorState {
-    Closed, Open,
-}
-
-impl DoorState {
-    pub fn toggle(&self) -> DoorState {
-        match self {
-            DoorState::Closed => DoorState::Open,
-            DoorState::Open => DoorState::Closed
-        }
-    }
-}
-
-#[derive(Eq, Serialize, Deserialize, PartialEq, Clone, Copy, Debug, Display, Hash)]
 pub enum DebugMapTile {
     Construction(usize),
     RectCenter,
@@ -36,7 +22,7 @@ pub enum MapTile {
     Floor(usize),
     Stairs,
     Corridor,
-    Door(DoorState),
+    Door,
 }
 
 #[repr(C, packed)]
@@ -78,7 +64,7 @@ impl MapTile {
         match &self {
             MapTile::Debug(_) => true,
             MapTile::Obscured => true,
-            MapTile::Door(DoorState::Closed) => true,
+            MapTile::Door => true,
             _ => false
         }
     }
@@ -94,7 +80,6 @@ impl MapTile {
 pub fn get_from_rep(s: &MapTile, p: &MapTileRep) -> GlyphOpt {
     use MapTile::*;
     use DebugMapTile::*;
-    use DoorState::*;
 
     match s {
         Debug(Construction(_)) => p.debug_construction,
@@ -103,7 +88,6 @@ pub fn get_from_rep(s: &MapTile, p: &MapTileRep) -> GlyphOpt {
         Floor(_) => p.floor,
         Stairs => p.stairs,
         Corridor => p.corridor,
-        Door(Closed) => p.door_closed,
-        Door(Open) => p.door_opened,
+        Door => p.door_closed,
     }
 }

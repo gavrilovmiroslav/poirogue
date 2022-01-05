@@ -144,9 +144,4 @@ pub struct HasFieldOfView(pub Vec<Point>);
 pub struct IsInvisible;
 pub struct IsPlayer;
 
-pub struct IsDirty(pub bool);
-impl IsDirty {
-    #[inline(always)] pub fn is_dirty(&self) -> bool { self.0 }
-    #[inline(always)] pub fn mark(&mut self) { self.0 = true; }
-    #[inline(always)] pub fn clean(&mut self) { self.0 = false; }
-}
+pub struct IsDirty;
