@@ -1,11 +1,11 @@
 use bracket_color::prelude::{BLACK, WHITE};
 use bracket_lib::prelude::{Point, Algorithm2D, BTerm, RED, DARK_RED, DARK_GRAY};
-use shipyard::{AddEntity, AllStoragesViewMut, EntitiesViewMut, EntityId, Get, IntoIter, IntoWithId, Remove, View, ViewMut};
+use shipyard::{AddEntity, AllStoragesViewMut, EntitiesViewMut, EntityId, Get, IntoIter, IntoWithId, Remove, UniqueViewMut, View, ViewMut};
 use crate::colors::named_color;
 use crate::entity::{HasGlyph, HasPosition, IsDirty};
 use crate::game::Store;
 use crate::game_systems::directives::MoveDirective;
-use crate::game_systems::{CarriesItem, HasInventory};
+use crate::game_systems::{CarriesItem, HasInventory, IsItem, NotificationLog};
 use crate::game_systems::intents::{BumpIntent, UnlockIntent};
 use crate::map::Map;
 use crate::store_helpers::StoreHelpers;
@@ -107,7 +107,7 @@ pub fn unlock__if_has_key_for_door(mut carries: ViewMut<CarriesItem>,
     let mut handled = Vec::new();
 
     for (unlock_intent_id, unlock) in (&unlock_intents).iter().with_id() {
-        let owner_id = unlock.target;
+        let owner_id = unlock.entity;
 
         for (lock_id, mut lock) in (&mut is_locked).iter().with_id()
             .filter(|(id, _)| unlock.target == *id) {
@@ -125,7 +125,7 @@ pub fn unlock__if_has_key_for_door(mut carries: ViewMut<CarriesItem>,
     for (unlock_id, carry_id, lock_id, key_spent) in handled {
         unlock_intents.remove(unlock_id);
 
-        if key_spent == ItemSpendMode::Consume { // separate intent
+        if key_spent == ItemSpendMode::Consume { // TODO: separate component?
             carries.remove(carry_id);
         }
 
@@ -134,6 +134,17 @@ pub fn unlock__if_has_key_for_door(mut carries: ViewMut<CarriesItem>,
 }
 
 
-pub fn unlock__default(mut unlock_intents: ViewMut<UnlockIntent>) {
+pub fn unlock__default(mut unlock_intents: ViewMut<UnlockIntent>,
+                       is_locked: View<IsLocked>,
+                       is_item: View<IsItem>,
+                       mut log: UniqueViewMut<NotificationLog>,) {
+
+    for unlock_intent in (&unlock_intents).iter() {
+        let lock = (&is_locked).get(unlock_intent.target).unwrap();
+        let item = (&is_item).get(lock.0).unwrap();
+
+        log.write(format!("This door is locked. It requires {} to open.", item.item.clone()));
+    }
+
     unlock_intents.clear();
 }

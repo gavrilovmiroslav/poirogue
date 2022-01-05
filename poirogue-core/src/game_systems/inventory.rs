@@ -1,11 +1,14 @@
 use std::borrow::BorrowMut;
 use std::collections::HashSet;
 use std::ops::Index;
-use bracket_lib::prelude::{Point, Algorithm2D};
-use shipyard::{AddEntity, AllStoragesViewMut, EntityId, Get, IntoIter, IntoWithId, Not, Remove, View, ViewMut};
-use crate::entity::{HasPosition, IsInvisible};
+use bracket_color::prelude::{BLACK, DARK_GRAY};
+use bracket_lib::prelude::{Point, Algorithm2D, BTerm};
+use shipyard::{AddEntity, AllStoragesViewMut, EntitiesViewMut, EntityId, Get, IntoIter, IntoWithId, Not, Remove, UniqueViewMut, View, ViewMut};
+use crate::colors::{ColorShifter, named_color};
+use crate::core_systems::IsCharacter;
+use crate::entity::{HasGlyph, HasPosition, IsInvisible};
 use crate::game::Store;
-use crate::game_systems::{BumpIntent, MoveDirective};
+use crate::game_systems::{BumpIntent, CollectIntent, MoveDirective, NotificationLog};
 use crate::map::Map;
 use crate::tiles::{MapTile, TileIndex};
 
@@ -22,51 +25,74 @@ pub struct CarriesItem {
     pub item: EntityId,
 }
 
-pub fn bump__collect_items((map, store): (&mut Map, &mut Store),
-                           mut items: ViewMut<IsItem>,
-                           mut has_position: ViewMut<HasPosition>,
-                           mut has_inventory: ViewMut<HasInventory>,
-                           mut is_invisible: ViewMut<IsInvisible>,
-                           mut carries: ViewMut<CarriesItem>,) {
+pub fn render_items((map, ctx): (&mut Map, &mut BTerm),
+                    has_position: View<HasPosition>,
+                    has_glyph: View<HasGlyph>,
+                    is_invisible: View<IsInvisible>,
+                    is_item: View<IsItem>,) {
 
-/*    let mut unhandled = Vec::new();
-    let mut handled = false;
+    for (_, pos, glyph, _) in (&is_item, &has_position, &has_glyph, !&is_invisible).iter()
+        .filter(|(i, _, _, _)| !i.is_collected) {
 
-    while let Some(bump) = store.lpop::<BumpIntent>(BUMP_INTENT_REQUEST_QUEUE, 0) {
-        let bumper = EntityId::from_inner(bump.entity).unwrap_or(EntityId::dead());
-        if bumper == EntityId::dead() { continue; }
+        let tile = map.point2d_to_index(Point::from(pos.0));
+        let fg = if map.is_tile_visible(tile) { glyph.0.fg } else { named_color(DARK_GRAY).darken(0.5) };
 
-        for (id, mut inventory) in (&mut has_inventory).iter().with_id().filter(|(id, p)| *id == bumper) {
-            assert_eq!(id, bumper);
-            let mut ids = Vec::new();
-
-            let bump_pos = Point::from(bump.pos);
-            for (id, (mut item, _)) in (&mut items, &mut has_position).iter().with_id()
-                .filter(|(_, (i, p))| !i.is_collected && p.0 == bump_pos) {
-
-                inventory.0.insert(item.item.clone());
-                println!("Collected {}", item.item);
-                item.is_collected = true;
-                ids.push(id);
-            }
-
-            if ids.len() > 0 {
-                for id in ids {
-                    has_position.remove(id);
-                    is_invisible.add_entity(id, IsInvisible);
-                    carries.add_entity(id, CarriesItem{ owner: bumper, item: id });
-                }
-
-                handled = true;
-            }
+        if map.is_tile_revealed(tile) {
+            ctx.print_color(pos.0.x, pos.0.y, fg, named_color(BLACK),  glyph.0.ch);
         }
+    }
+}
 
-        if !handled {
-            unhandled.push(bump);
+pub fn bump__interpret_as_collect_item_intent(characters: View<IsCharacter>,
+                                              items: View<IsItem>,
+                                              has_position: View<HasPosition>,
+                                              has_inventory: View<HasInventory>,
+                                              is_invisible: View<IsInvisible>,
+                                              mut bump_intents: ViewMut<BumpIntent>,
+                                              mut collect_intents: ViewMut<CollectIntent>,
+                                              mut entities: EntitiesViewMut,) {
+
+    let mut handled = Vec::new();
+    for (bump_id, bump) in (&bump_intents).iter().with_id() {
+        for (_, (_, inventory)) in (&characters, &has_inventory).iter().with_id()
+            .filter(|(id, _)| *id == bump.bumper) {
+
+            for (item_id, (_, _, _)) in (&items, &has_position, !&is_invisible).iter().with_id()
+                .filter(|(_, (i, p, _))| !i.is_collected && p.0 == bump.pos) {
+
+                entities.add_entity((&mut collect_intents, ), (CollectIntent{ collector: bump.bumper, item: item_id }, ));
+                handled.push(bump_id);
+            }
         }
     }
 
-    if unhandled.len() > 0 {
-        store.lextend(BUMP_INTENT_REQUEST_QUEUE, &unhandled);
-    }*/
+    for id in handled {
+        bump_intents.remove(id);
+    }
+}
+
+
+pub fn collect__default(mut items: ViewMut<IsItem>,
+                        mut has_position: ViewMut<HasPosition>,
+                        mut carries_item: ViewMut<CarriesItem>,
+                        mut has_inventory: ViewMut<HasInventory>,
+                        mut collect_intents: ViewMut<CollectIntent>,
+                        mut entities: EntitiesViewMut,
+                        mut log: UniqueViewMut<NotificationLog>) {
+
+    for collect_intent in (&collect_intents).iter() {
+        let mut inv = (&mut has_inventory).get(collect_intent.collector).unwrap();
+        let mut item = (&mut items).get(collect_intent.item).unwrap();
+
+        inv.0.insert(item.item.clone());
+        has_position.remove(collect_intent.item);
+        item.is_collected = true;
+
+        log.write(format!("Collected {}.", item.item.clone()));
+
+        let carry = CarriesItem{ owner: collect_intent.collector, item: collect_intent.item };
+        entities.add_entity((&mut carries_item,), (carry,));
+    }
+
+    collect_intents.clear();
 }

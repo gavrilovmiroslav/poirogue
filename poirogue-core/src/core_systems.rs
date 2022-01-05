@@ -72,11 +72,11 @@ pub fn update_player_vision(map: &mut Map,
 }
 
 
-pub fn interpret_player_bump_controls(input: &InputSnapshots,
-                                      is_player: View<IsPlayer>,
-                                      mut positions: ViewMut<HasPosition>,
-                                      mut bump_intents: ViewMut<BumpIntent>,
-                                      mut entities: EntitiesViewMut,) {
+pub fn interpret_player_input_as_bump_intent(input: &InputSnapshots,
+                                             is_player: View<IsPlayer>,
+                                             mut positions: ViewMut<HasPosition>,
+                                             mut bump_intents: ViewMut<BumpIntent>,
+                                             mut entities: EntitiesViewMut,) {
 
     for (id, (_, mut has_pos)) in (&is_player, &mut positions).iter().with_id() {
         let keyboard = &input.keyboard;

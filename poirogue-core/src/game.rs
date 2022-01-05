@@ -16,6 +16,7 @@ use lazy_static::*;
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use serde::{de, Serialize};
 use shipyard::{Workload, WorkloadBuilder, World};
+use simple_ringbuf::RingBuffer;
 
 use crate::map::Map;
 use crate::readonly_archive_cave::ReadonlyArchiveCave;
@@ -38,7 +39,7 @@ use crate::render_view::{View};
 use crate::render_view::*;
 use crate::store_helpers::StoreHelpers;
 use crate::game_systems;
-use crate::game_systems::{HasInventory, IsDoor, IsItem, IsLocked, Item, ItemSpendMode};
+use crate::game_systems::{HasInventory, IsDoor, IsItem, IsLocked, Item, ItemSpendMode, NotificationLog};
 
 pub type Store = PickleDb;
 
@@ -144,7 +145,7 @@ impl GameData {
     fn create_new_level(&mut self) {
         self.world.clear();
 
-        let (map, storage) = run_map_gen(self.size.0, self.size.1, &mut self.store);
+        let (map, storage) = run_map_gen(self.size.0, self.size.1 - 3, &mut self.store);
         self.map = map;
 
         let all_doors = self.map.get_all_doors().as_slice().to_vec();
@@ -249,6 +250,7 @@ impl Game {
         let mut game = Game::new(width, height, &args);
 
         game.data.setup_store();
+        game.data.world.add_unique(NotificationLog::new(3)); // TODO: don't hardcode
 
         game.data.commands.push_back(GameCommand::Flow(FlowCommand::ReloadViewConfigs));
         game.data.commands.push_back(GameCommand::Flow(FlowCommand::GenerateLevel));
@@ -282,23 +284,28 @@ impl GameState for Game {
         world.run_with_data(&core_systems::update_player_vision, &mut data.map).unwrap();
         world.run_with_data(&core_systems::render_map, (&mut data.map, &mut data.store, ctx)).unwrap();
         world.run_with_data(&game_systems::render_doors, (&mut data.map, ctx)).unwrap();
+        world.run_with_data(&game_systems::render_items, (&mut data.map, ctx)).unwrap();
         world.run_with_data(&core_systems::render_characters, (&data.map, ctx)).unwrap();
+        world.run_with_data(&game_systems::render_notification_log, ctx).unwrap();
 
         // cleanup
         world.run(&core_systems::clean_dirty).unwrap();
 
         // input
-        world.run_with_data(&core_systems::interpret_player_bump_controls, &data.input).unwrap();
+        world.run_with_data(&core_systems::interpret_player_input_as_bump_intent, &data.input).unwrap();
 
         // bump semantics
+        world.run(&game_systems::bump__interpret_as_collect_item_intent).unwrap();
         world.run(&game_systems::bump__interpret_as_door_unlock_intent).unwrap();
         world.run_with_data(&game_systems::bump__open_doors, &mut data.map).unwrap();
-        world.run_with_data(&game_systems::bump__collect_items, (&mut data.map, &mut data.store)).unwrap();
         world.run_with_data(&game_systems::bump__default, &data.map).unwrap();
 
         // unlock semantics
         world.run(&game_systems::unlock__if_has_key_for_door).unwrap();
         world.run(&game_systems::unlock__default).unwrap();
+
+        // collect semantics
+        world.run(&game_systems::collect__default).unwrap();
 
         // resolve directives
         world.run_with_data(&game_systems::resolve_move_directives, &data.map).unwrap();
