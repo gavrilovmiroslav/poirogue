@@ -186,6 +186,8 @@ impl GameData {
             HasGlyph(Glyph::new('@')),
             HasFieldOfView(Vec::new()),
         ));
+
+        self.world.borrow::<UniqueViewMut<IsDirty>>().unwrap().0 = true;
     }
 
     fn resolve_command_queue(&mut self, ctx: &mut BTerm) {
@@ -315,15 +317,15 @@ impl GameState for Game {
         world.run_with_data(&game_systems::on_bump_default, &data.map).unwrap();
 
         // unlock semantics
-        world.run(&game_systems::unlock__if_has_key_for_door).unwrap();
-        world.run(&game_systems::unlock__default).unwrap();
+        world.run(&game_systems::on_unlock_if_has_key_for_door).unwrap();
+        world.run(&game_systems::on_unlock_default).unwrap();
 
         // collect semantics
-        world.run(&game_systems::collect__default).unwrap();
+        world.run(&game_systems::on_collect_default).unwrap();
 
         // investigate semantics
-        world.run(&game_systems::investigate__lock).unwrap();
-        world.run(&game_systems::investigate__default).unwrap();
+        world.run(&game_systems::on_investigate_lock).unwrap();
+        world.run(&game_systems::on_investigate_default).unwrap();
 
         // resolve directives
         world.run_with_data(&game_systems::resolve_move_directives, &data.map).unwrap();

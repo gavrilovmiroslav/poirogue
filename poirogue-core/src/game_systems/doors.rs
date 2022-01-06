@@ -1,5 +1,5 @@
 use bracket_lib::prelude::{Point, Algorithm2D, BTerm, RED, DARK_RED, DARK_GRAY, GOLD, DARK_GOLDENROD, CRIMSON, BLACK, WHITE, ORANGE, DARK_ORANGE, YELLOW, GREEN, DARK_GREEN};
-use shipyard::{AddEntity, AllStoragesViewMut, EntitiesViewMut, EntityId, Get, IntoIter, IntoWithId, Remove, UniqueView, UniqueViewMut, View, ViewMut};
+use shipyard::{AddEntity, AllStoragesViewMut, EntitiesViewMut, EntityId, Get, IntoIter, IntoWithId, Remove, Storage, UniqueView, UniqueViewMut, View, ViewMut};
 use crate::colors::{ColorShifter, named_color};
 use crate::entity::{HasGlyph, HasPosition, IsDirty, IsPlayer};
 use crate::game::Store;
@@ -114,17 +114,19 @@ pub fn on_bump_interpret_as_door_unlock_intent(doors: View<IsDoor>,
 
     for id in handled {
         bump_intents.remove(id);
+        entities.delete(id);
     }
 }
 
 
 pub fn on_bump_open_doors(map: &mut Map,
-                        has_position: View<HasPosition>,
-                        mut doors: ViewMut<IsDoor>,
-                        mut locked: ViewMut<IsLocked>,
-                        mut has_glyph: ViewMut<HasGlyph>,
-                        mut bump_intents: ViewMut<BumpIntent>,
-                        mut dirty: UniqueViewMut<IsDirty>) {
+                          has_position: View<HasPosition>,
+                          mut doors: ViewMut<IsDoor>,
+                          mut locked: ViewMut<IsLocked>,
+                          mut has_glyph: ViewMut<HasGlyph>,
+                          mut bump_intents: ViewMut<BumpIntent>,
+                          mut dirty: UniqueViewMut<IsDirty>,
+                          mut entities: EntitiesViewMut,) {
 
     let mut handled = Vec::new();
     for (bump_id, bump) in (&bump_intents).iter().with_id() {
@@ -145,18 +147,20 @@ pub fn on_bump_open_doors(map: &mut Map,
 
     for id in handled {
         bump_intents.remove(id);
+        entities.delete(id);
     }
 }
 
 
-pub fn unlock__if_has_key_for_door(items: View<IsItem>,
-                                   mut carries: ViewMut<CarriesItem>,
-                                   mut is_locked: ViewMut<IsLocked>,
-                                   mut is_known: ViewMut<IsKnown>,
-                                   mut lock_spends_key: ViewMut<ObjectUsedUp>,
-                                   mut unlock_intents: ViewMut<UnlockIntent>,
-                                   mut log: UniqueViewMut<NotificationLog>,
-                                   mut dirty: UniqueViewMut<IsDirty>) {
+pub fn on_unlock_if_has_key_for_door(items: View<IsItem>,
+                                     mut carries: ViewMut<CarriesItem>,
+                                     mut is_locked: ViewMut<IsLocked>,
+                                     mut is_known: ViewMut<IsKnown>,
+                                     mut lock_spends_key: ViewMut<ObjectUsedUp>,
+                                     mut unlock_intents: ViewMut<UnlockIntent>,
+                                     mut log: UniqueViewMut<NotificationLog>,
+                                     mut dirty: UniqueViewMut<IsDirty>,
+                                     mut entities: EntitiesViewMut) {
 
     let mut handled = Vec::new();
 
@@ -187,8 +191,9 @@ pub fn unlock__if_has_key_for_door(items: View<IsItem>,
         dirty.0 = true;
     }
 
-    for (unlock_id, carry_id, lock_id, key) in handled {
-        unlock_intents.remove(unlock_id);
+    for (unlock_intent_id, carry_id, lock_id, key) in handled {
+        unlock_intents.remove(unlock_intent_id);
+        entities.delete(unlock_intent_id);
 
         let mut key_spent_message = ".";
 
@@ -206,22 +211,24 @@ pub fn unlock__if_has_key_for_door(items: View<IsItem>,
 }
 
 
-pub fn unlock__default(mut unlock_intents: ViewMut<UnlockIntent>,
-                       mut investigate_intents: ViewMut<InvestigateIntent>,
-                       mut entities: EntitiesViewMut,) {
+pub fn on_unlock_default(mut unlock_intents: ViewMut<UnlockIntent>,
+                         mut investigate_intents: ViewMut<InvestigateIntent>,
+                         mut entities: EntitiesViewMut,) {
 
-    for unlock_intent in (&unlock_intents).iter() {
+    for (unlock_intent_id, unlock_intent) in (&unlock_intents).iter().with_id() {
         entities.add_entity((&mut investigate_intents,), (InvestigateIntent{ entity: unlock_intent.target },));
+        entities.delete(unlock_intent_id);
     }
 
     unlock_intents.clear();
 }
 
-pub fn investigate__lock(mut investigate_intents: ViewMut<InvestigateIntent>,
-                         is_locked: View<IsLocked>,
-                         is_item: View<IsItem>,
-                         mut log: UniqueViewMut<NotificationLog>,
-                         mut dirty: UniqueViewMut<IsDirty>) {
+pub fn on_investigate_lock(mut investigate_intents: ViewMut<InvestigateIntent>,
+                           is_locked: View<IsLocked>,
+                           is_item: View<IsItem>,
+                           mut log: UniqueViewMut<NotificationLog>,
+                           mut dirty: UniqueViewMut<IsDirty>,
+                           mut entities: EntitiesViewMut,) {
 
     let mut handled = Vec::new();
 
@@ -240,9 +247,15 @@ pub fn investigate__lock(mut investigate_intents: ViewMut<InvestigateIntent>,
 
     for id in handled {
         investigate_intents.remove(id);
+        entities.delete(id);
     }
 }
 
-pub fn investigate__default(mut investigate_intents: ViewMut<InvestigateIntent>,) {
+pub fn on_investigate_default(mut investigate_intents: ViewMut<InvestigateIntent>,
+                              mut entities: EntitiesViewMut) {
+    for (id, _) in (&investigate_intents).iter().with_id() {
+        entities.delete(id);
+    }
+
     investigate_intents.clear();
 }

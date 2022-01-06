@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use std::ops::Index;
 use bracket_color::prelude::{BLACK, DARK_GRAY};
 use bracket_lib::prelude::{Point, Algorithm2D, BTerm};
-use shipyard::{AddEntity, AllStoragesViewMut, EntitiesViewMut, EntityId, Get, IntoIter, IntoWithId, Not, Remove, UniqueView, UniqueViewMut, View, ViewMut};
+use shipyard::{AddEntity, AllStoragesViewMut, EntitiesViewMut, EntityId, Get, IntoIter, IntoWithId, Not, Remove, Storage, UniqueView, UniqueViewMut, View, ViewMut};
 use crate::colors::{ColorShifter, named_color};
 use crate::core_systems::IsCharacter;
 use crate::entity::{HasGlyph, HasPosition, IsDirty, IsInvisible};
@@ -64,19 +64,20 @@ pub fn on_bump_interpret_as_collect_item_intent(characters: View<IsCharacter>,
 
     for id in handled {
         bump_intents.remove(id);
+        entities.delete(id);
     }
 }
 
 
-pub fn collect__default(mut items: ViewMut<IsItem>,
-                        mut has_position: ViewMut<HasPosition>,
-                        mut carries_item: ViewMut<CarriesItem>,
-                        mut collect_intents: ViewMut<CollectIntent>,
-                        mut entities: EntitiesViewMut,
-                        mut log: UniqueViewMut<NotificationLog>,
-                        mut is_dirty: UniqueViewMut<IsDirty>) {
+pub fn on_collect_default(mut items: ViewMut<IsItem>,
+                          mut has_position: ViewMut<HasPosition>,
+                          mut carries_item: ViewMut<CarriesItem>,
+                          mut collect_intents: ViewMut<CollectIntent>,
+                          mut log: UniqueViewMut<NotificationLog>,
+                          mut is_dirty: UniqueViewMut<IsDirty>,
+                          mut entities: EntitiesViewMut,) {
 
-    for collect_intent in (&collect_intents).iter() {
+    for (collect_intent_id, collect_intent) in (&collect_intents).iter().with_id() {
         let mut item = (&mut items).get(collect_intent.item).unwrap();
 
         has_position.remove(collect_intent.item);
@@ -88,6 +89,7 @@ pub fn collect__default(mut items: ViewMut<IsItem>,
         entities.add_entity((&mut carries_item,), (carry,));
 
         is_dirty.0 = true;
+        entities.delete(collect_intent_id);
     }
 
     collect_intents.clear();
