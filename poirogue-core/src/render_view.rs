@@ -19,7 +19,7 @@ pub trait Colorable {
     fn get_color(&self) -> Color;
 }
 
-pub trait View
+pub trait RenderViewDefinition
 {
     fn get_description(&self, t: &MapTile) -> String;
     fn get_glyph(&self, t: &MapTile) -> char;
@@ -67,7 +67,7 @@ impl From<RenderView> for u8 {
     }
 }
 
-impl View for RenderView {
+impl RenderViewDefinition for RenderView {
     fn get_description(&self, t: &MapTile) -> String {
         match t {
             MapTile::Debug(DebugMapTile::Construction(_)) => "!Construction",

@@ -13,6 +13,7 @@ use crate::game::{GameData, Store};
 use crate::input::{InputSnapshot, InputSnapshots};
 use crate::map::Map;
 use crate::game_systems::directives::MoveDirective;
+use crate::game_systems::{CollectIntent, Handle, InvestigateIntent};
 use crate::game_systems::intents::{BumpIntent, UnlockIntent};
 use crate::render_view::RenderView;
 use crate::tiles::{MapTile, TileIndex};
@@ -79,7 +80,7 @@ pub fn update_player_vision(map: &mut Map,
 pub fn interpret_player_input_as_bump_intent(input: &InputSnapshots,
                                              is_player: View<IsPlayer>,
                                              mut positions: ViewMut<HasPosition>,
-                                             mut bump_intents: ViewMut<BumpIntent>,
+                                             mut bump_intents: ViewMut<Handle<BumpIntent>>,
                                              mut entities: EntitiesViewMut,) {
 
     for (id, (_, mut has_pos)) in (&is_player, &mut positions).iter().with_id() {
@@ -93,7 +94,7 @@ pub fn interpret_player_input_as_bump_intent(input: &InputSnapshots,
         if keyboard.is_pressed(VirtualKeyCode::Right) { new_pos.x += 1; }
 
         if *pos != new_pos {
-            entities.add_entity((&mut bump_intents, ), (BumpIntent { bumper: id, pos: new_pos }, ));
+            entities.add_entity((&mut bump_intents, ), (Handle::new(BumpIntent { bumper: id, pos: new_pos }),));
         }
     }
 }
@@ -153,3 +154,4 @@ pub fn render_characters((map, ctx): (&Map, &mut BTerm),
 pub fn clean_dirty(mut dirty: UniqueViewMut<IsDirty>) {
     dirty.0 = false;
 }
+

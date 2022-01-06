@@ -20,7 +20,6 @@ mod entity;
 mod colors;
 mod core_systems;
 mod json;
-mod store_helpers;
 mod game_systems;
 
 embedded_resource!(TILE_FONT, "../resources/classic_roguelike_white.png");

@@ -15,7 +15,7 @@ use object_pool::{Pool, Reusable};
 use lazy_static::*;
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use serde::{de, Serialize};
-use shipyard::{AllStoragesViewMut, StorageMemoryUsage, UniqueViewMut, Workload, WorkloadBuilder, World};
+use shipyard::{AllStoragesViewMut, Storage, StorageMemoryUsage, UniqueView, UniqueViewMut, View, ViewMut, Workload, WorkloadBuilder, World};
 use shipyard::error::UniqueRemove::AllStorages;
 use simple_ringbuf::RingBuffer;
 
@@ -35,11 +35,10 @@ use crate::opt::Opt;
 use crate::rand_gen::{get_random_between, get_random_from, get_random_sub};
 use crate::rex::draw_rex;
 use crate::tiles::{MapTile, MapTileRep, TileIndex};
-use crate::render_view::{View};
+use crate::render_view::{RenderViewDefinition};
 use crate::render_view::*;
-use crate::store_helpers::StoreHelpers;
 use crate::game_systems;
-use crate::game_systems::{IsDoor, IsItem, IsLocked, Item, NotificationLog, ObjectUsedUp};
+use crate::game_systems::{BumpIntent, CollectIntent, Handle, InvestigateIntent, IsDoor, IsItem, IsLocked, Item, MoveDirective, NotificationLog, ObjectUsedUp, UnlockDirective, UnlockIntent};
 
 pub type Store = PickleDb;
 
@@ -57,6 +56,7 @@ pub struct GameData {
     pub data: Box<dyn Cave>,
     pub store: Store,
     pub world: World,
+    pub usage_log: Option<Store>,
 }
 
 impl JsonFields for GameData {
@@ -97,6 +97,9 @@ impl GameData {
             },
             store: PickleDb::new("", PickleDbDumpPolicy::NeverDump, SerializationMethod::Bin),
             world: World::new(),
+            usage_log: if args.keep_memory_log {
+                Some(PickleDb::new("memory_usage_log.yaml", PickleDbDumpPolicy::DumpUponRequest, SerializationMethod::Json))
+            } else { None },
         }
     }
 
@@ -214,7 +217,7 @@ impl GameData {
 
 impl Game {
     pub fn new(w: i32, h: i32, args: &Opt) -> Game {
-        Game { data: GameData::new(w, h, args) }
+        Game { data: GameData::new(w, h, args), }
     }
 
     pub fn run(args: Opt) {
@@ -317,6 +320,48 @@ impl GameState for Game {
         world.run(&game_systems::on_investigate_default).unwrap();
 
         // resolve directives
+        world.run(&game_systems::resolve_unlock_directive).unwrap();
         world.run_with_data(&game_systems::resolve_move_directives, &data.map).unwrap();
+
+        world.run(&game_systems::delete_handled_intents).unwrap();
+
+        if data.usage_log.is_some() {
+            if world.borrow::<UniqueView<Time>>().unwrap().0 % 100 == 0 {
+                log_overall_memory_usage(world, &mut data.usage_log.as_mut().unwrap());
+            }
+        }
     }
+}
+
+fn log_memory_usage<T: Send + Sync + 'static>(world: &World, usage_log: &mut Store) {
+    if let Ok(view) = world.borrow::<View<T>>() {
+        let usage = view.memory_usage().unwrap();
+        let name = usage.storage_name.to_string();
+
+        if !usage_log.lexists(name.as_str()) {
+            usage_log.lcreate(name.as_str());
+            usage_log.lcreate(format!("{}:allocated_memory", name).as_str());
+            usage_log.lcreate(format!("{}:used_memory", name).as_str());
+            usage_log.lcreate(format!("{}:component_count", name).as_str());
+        }
+
+        usage_log.ladd(format!("{}:allocated_memory", name.as_str()).as_str(),  &usage.allocated_memory_bytes);
+        usage_log.ladd(format!("{}:used_memory", name.as_str()).as_str(),  &usage.used_memory_bytes);
+        usage_log.ladd(format!("{}:component_count", name.as_str()).as_str(),  &usage.component_count);
+    }
+}
+
+fn log_overall_memory_usage(world: &World, usage_log: &mut Store) {
+    log_memory_usage::<Handle<BumpIntent>>(world, usage_log);
+    log_memory_usage::<Handle<UnlockIntent>>(world, usage_log);
+    log_memory_usage::<Handle<CollectIntent>>(world, usage_log);
+    log_memory_usage::<Handle<InvestigateIntent>>(world, usage_log);
+    log_memory_usage::<MoveDirective>(world, usage_log);
+    log_memory_usage::<UnlockDirective>(world, usage_log);
+    log_memory_usage::<IsItem>(world, usage_log);
+    log_memory_usage::<IsLocked>(world, usage_log);
+    log_memory_usage::<HasPosition>(world, usage_log);
+    log_memory_usage::<IsCharacter>(world, usage_log);
+
+    usage_log.dump();
 }

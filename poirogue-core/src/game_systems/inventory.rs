@@ -8,7 +8,7 @@ use crate::colors::{ColorShifter, named_color};
 use crate::core_systems::IsCharacter;
 use crate::entity::{HasGlyph, HasPosition, IsDirty, IsInvisible};
 use crate::game::Store;
-use crate::game_systems::{BumpIntent, CollectIntent, MoveDirective, NotificationLog};
+use crate::game_systems::{BumpIntent, CollectIntent, Handle, MoveDirective, NotificationLog};
 use crate::map::Map;
 use crate::tiles::{MapTile, TileIndex};
 
@@ -44,27 +44,25 @@ pub fn render_items((map, ctx): (&Map, &mut BTerm),
     }
 }
 
-pub fn on_bump_interpret_as_collect_item_intent(characters: View<IsCharacter>,
-                                              items: View<IsItem>,
-                                              has_position: View<HasPosition>,
-                                              is_invisible: View<IsInvisible>,
-                                              mut bump_intents: ViewMut<BumpIntent>,
-                                              mut collect_intents: ViewMut<CollectIntent>,
-                                              mut entities: EntitiesViewMut,) {
+pub fn on_bump_interpret_as_collect_item_intent(items: View<IsItem>,
+                                                has_position: View<HasPosition>,
+                                                mut bump_intents: ViewMut<Handle<BumpIntent>>,
+                                                mut collect_intents: ViewMut<Handle<CollectIntent>>,
+                                                mut entities: EntitiesViewMut,) {
 
-    let mut handled = Vec::new();
-    for (bump_id, bump) in (&bump_intents).iter().with_id() {
-        for (item_id, (_, _, _)) in (&items, &has_position, !&is_invisible).iter().with_id()
-            .filter(|(_, (i, p, _))| !i.is_collected && p.0 == bump.pos) {
+    for mut bump in (&mut bump_intents).iter().
+        filter(|b| !b.handled) {
 
-            entities.add_entity((&mut collect_intents, ), (CollectIntent{ collector: bump.bumper, item: item_id }, ));
-            handled.push(bump_id);
+        for (item_id, (_, pos)) in (&items, &has_position).iter().with_id()
+            .filter(|(_, (i, _))| !i.is_collected) {
+
+            if pos.0 != bump.intent.pos { continue; }
+
+            entities.add_entity((&mut collect_intents, ),
+                (Handle::new(CollectIntent{ collector: bump.intent.bumper, item: item_id }), ));
+
+            bump.handled = true;
         }
-    }
-
-    for id in handled {
-        bump_intents.remove(id);
-        entities.delete(id);
     }
 }
 
@@ -72,25 +70,25 @@ pub fn on_bump_interpret_as_collect_item_intent(characters: View<IsCharacter>,
 pub fn on_collect_default(mut items: ViewMut<IsItem>,
                           mut has_position: ViewMut<HasPosition>,
                           mut carries_item: ViewMut<CarriesItem>,
-                          mut collect_intents: ViewMut<CollectIntent>,
+                          mut collect_intents: ViewMut<Handle<CollectIntent>>,
                           mut log: UniqueViewMut<NotificationLog>,
                           mut is_dirty: UniqueViewMut<IsDirty>,
                           mut entities: EntitiesViewMut,) {
 
-    for (collect_intent_id, collect_intent) in (&collect_intents).iter().with_id() {
-        let mut item = (&mut items).get(collect_intent.item).unwrap();
+    for mut collect in (&mut collect_intents).iter().
+        filter(|c| !c.handled) {
 
-        has_position.remove(collect_intent.item);
+        let mut item = (&mut items).get(collect.intent.item).unwrap();
+
+        has_position.remove(collect.intent.item);
         item.is_collected = true;
 
         log.write(format!("Collected {}.", item.item));
 
-        let carry = CarriesItem{ owner: collect_intent.collector, item: collect_intent.item };
+        let carry = CarriesItem{ owner: collect.intent.collector, item: collect.intent.item };
         entities.add_entity((&mut carries_item,), (carry,));
 
         is_dirty.0 = true;
-        entities.delete(collect_intent_id);
+        collect.handled = true;
     }
-
-    collect_intents.clear();
 }

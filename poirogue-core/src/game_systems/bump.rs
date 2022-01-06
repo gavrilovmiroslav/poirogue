@@ -1,28 +1,23 @@
 use bracket_lib::prelude::{Algorithm2D, Point};
 use shipyard::{AddEntity, AllStoragesViewMut, EntitiesViewMut, EntityId, IntoIter, IntoWithId, Storage, ViewMut};
 use crate::game::Store;
-use crate::game_systems::{BumpIntent, MoveDirective};
+use crate::game_systems::{BumpIntent, Handle, MoveDirective};
 use crate::map::Map;
 
 pub fn on_bump_default(map: &Map,
-                       mut bump_intents: ViewMut<BumpIntent>,
+                       mut bump_intents: ViewMut<Handle<BumpIntent>>,
                        mut moves: ViewMut<MoveDirective>,
                        mut entities: EntitiesViewMut) {
 
-    let mut ids = Vec::new();
-    for (id, bump) in (&bump_intents).iter().with_id() {
-        let tile = map.point2d_to_index(bump.pos);
+    for mut bump in (&mut bump_intents).iter()
+        .filter(|b| !b.handled) {
+
+        let tile = map.point2d_to_index(bump.intent.pos);
 
         if !map.is_tile_blocked(tile) {
-            moves.add_entity(bump.bumper, MoveDirective(bump.pos));
+            moves.add_entity(bump.intent.bumper, MoveDirective(bump.intent.bumper, bump.intent.pos));
         }
 
-        ids.push(id);
+        bump.handled = true;
     }
-
-    for id in ids {
-        entities.delete(id);
-    }
-
-    bump_intents.clear();
 }

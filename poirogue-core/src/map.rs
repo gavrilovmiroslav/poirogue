@@ -7,7 +7,7 @@ use bracket_lib::prelude::*;
 use object_pool::Reusable;
 use crate::commands::GameCommand;
 use crate::tiles::{MapTile, TileIndex};
-use crate::render_view::{View};
+use crate::render_view::{RenderViewDefinition};
 use lru::{LruCache};
 use lazy_static::*;
 use std::sync::Mutex;
@@ -136,7 +136,7 @@ impl Map {
 }
 
 impl Map {
-    pub fn render(&self, ctx: &mut BTerm, view: &dyn View, store: &Store, player_position: Point, time: u64) {
+    pub fn render(&self, ctx: &mut BTerm, view: &dyn RenderViewDefinition, store: &Store, player_position: Point, time: u64) {
         let mut index: usize = 0;
 
         let mut batch = DrawBatch::new();

@@ -15,4 +15,6 @@ pub struct Opt {
     pub log_height: usize,
     #[structopt(short = "t", long, default_value = "360")]
     pub log_expiry: u32,
+    #[structopt(short = "m", long)]
+    pub keep_memory_log: bool,
 }
