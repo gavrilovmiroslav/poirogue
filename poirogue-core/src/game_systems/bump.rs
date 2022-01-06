@@ -4,7 +4,7 @@ use crate::game::Store;
 use crate::game_systems::{BumpIntent, MoveDirective};
 use crate::map::Map;
 
-pub fn bump__default(map: &Map,
+pub fn on_bump_default(map: &Map,
                      mut bump_intents: ViewMut<BumpIntent>,
                      mut moves: ViewMut<MoveDirective>,) {
 

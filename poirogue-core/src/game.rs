@@ -15,7 +15,8 @@ use object_pool::{Pool, Reusable};
 use lazy_static::*;
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
 use serde::{de, Serialize};
-use shipyard::{Workload, WorkloadBuilder, World};
+use shipyard::{AllStoragesViewMut, StorageMemoryUsage, UniqueViewMut, Workload, WorkloadBuilder, World};
+use shipyard::error::UniqueRemove::AllStorages;
 use simple_ringbuf::RingBuffer;
 
 use crate::map::Map;
@@ -27,7 +28,7 @@ use crate::murder_gen::generate_murder;
 use crate::{core_systems, rand_gen};
 use crate::colors::named_color;
 use crate::core_systems::IsCharacter;
-use crate::entity::{HasFieldOfView, HasGlyph, HasPosition, IsDirty, IsPlayer};
+use crate::entity::{HasFieldOfView, HasGlyph, HasPosition, IsDirty, IsPlayer, PlayerPosition};
 use crate::glyph::Glyph;
 use crate::json::JsonFields;
 //use crate::entity::{AbstractEntity, Entity};
@@ -39,12 +40,13 @@ use crate::render_view::{View};
 use crate::render_view::*;
 use crate::store_helpers::StoreHelpers;
 use crate::game_systems;
-use crate::game_systems::{HasInventory, IsDoor, IsItem, IsLocked, Item, ItemSpendMode, NotificationLog};
+use crate::game_systems::{IsDoor, IsItem, IsLocked, Item, NotificationLog, ObjectUsedUp};
 
 pub type Store = PickleDb;
 
 pub struct Game {
     pub data: GameData,
+    time: i64,
 }
 
 pub struct GameData {
@@ -163,13 +165,15 @@ impl GameData {
                 let pt = get_random_from(&storage.rects).center();
                 let key = format!("Key for {}", door);
                 let key_entity = self.world.add_entity((
-                    IsItem{ item: key.clone(), is_collected: false },
-                    HasPosition(pt.clone()),
+                    IsItem{ item: key, is_collected: false },
+                    HasPosition(pt),
                     HasGlyph(Glyph::new('(')),
                 ));
 
-                self.world.add_component(door_entity, (IsLocked(key_entity, ItemSpendMode::Consume),));
-                println!("Added {} to the world at ({}, {})", key, pt.x, pt.y);
+                self.world.add_component(door_entity, (IsLocked{ key: key_entity },));
+                if pt.x % 2 == 0 {
+                    self.world.add_component(door_entity, (ObjectUsedUp,));
+                }
             }
         }
 
@@ -178,11 +182,9 @@ impl GameData {
         self.world.add_entity((
             IsPlayer,
             IsCharacter,
-            IsDirty,
             HasPosition(starting_pos),
             HasGlyph(Glyph::new('@')),
             HasFieldOfView(Vec::new()),
-            HasInventory(HashSet::new()),
         ));
     }
 
@@ -203,7 +205,7 @@ impl GameData {
                 GameCommand::Flow(FlowCommand::CycleViews) => {
                     let view = self.store.get::<RenderView>("view").unwrap_or(RenderView::Game);
                     self.store.set("view", &view.toggle()).unwrap();
-                    self.store.set("debug_render_dirty", &true).unwrap();
+                    self.world.borrow::<UniqueViewMut<IsDirty>>().unwrap().0 = true;
                 },
 
                 _ => {}
@@ -216,7 +218,7 @@ impl GameData {
 
 impl Game {
     pub fn new(w: i32, h: i32, args: &Opt) -> Game {
-        Game { data: GameData::new(w, h, args), }
+        Game { data: GameData::new(w, h, args), time: 0 }
     }
 
     pub fn run(args: Opt) {
@@ -250,7 +252,9 @@ impl Game {
         let mut game = Game::new(width, height, &args);
 
         game.data.setup_store();
-        game.data.world.add_unique(NotificationLog::new(3)); // TODO: don't hardcode
+        game.data.world.add_unique(IsDirty(true));
+        game.data.world.add_unique(PlayerPosition(Point::new(0, 0)));
+        game.data.world.add_unique(NotificationLog::new(3, 360)); // TODO: don't hardcode
 
         game.data.commands.push_back(GameCommand::Flow(FlowCommand::ReloadViewConfigs));
         game.data.commands.push_back(GameCommand::Flow(FlowCommand::GenerateLevel));
@@ -268,6 +272,7 @@ impl Game {
 impl GameState for Game {
     fn tick(&mut self, ctx: &mut BTerm) {
         self.update_time();
+        self.time += 1;
 
         self.data.resolve_command_queue(ctx);
         self.data.input.make_new_snapshots(INPUT.lock().borrow());
@@ -279,14 +284,23 @@ impl GameState for Game {
         world.run_with_data(&core_systems::accept_meta_commands, (&data.input, &mut data.commands)).unwrap();
         world.run_with_data(&core_systems::update_stored_player_position, (&mut data.store));
         world.run_with_data(&core_systems::update_dirty_fovs, (&data.store, &data.map)).unwrap();
+        world.run(&game_systems::update_notification_log_expiry).unwrap();
 
         // rendering
         world.run_with_data(&core_systems::update_player_vision, &mut data.map).unwrap();
+
+        ctx.set_active_console(0);
         world.run_with_data(&core_systems::render_map, (&mut data.map, &mut data.store, ctx)).unwrap();
-        world.run_with_data(&game_systems::render_doors, (&mut data.map, ctx)).unwrap();
-        world.run_with_data(&game_systems::render_items, (&mut data.map, ctx)).unwrap();
+        world.run_with_data(&game_systems::render_doors, (&data.map, ctx)).unwrap();
+        world.run_with_data(&game_systems::render_locked_doors, (&data.map, ctx)).unwrap();
+        world.run_with_data(&game_systems::render_known_locked_doors, (&data.map, ctx)).unwrap();
+        world.run_with_data(&game_systems::render_items, (&data.map, ctx)).unwrap();
         world.run_with_data(&core_systems::render_characters, (&data.map, ctx)).unwrap();
+
+        ctx.set_active_console(2);
+        ctx.cls();
         world.run_with_data(&game_systems::render_notification_log, ctx).unwrap();
+        world.run_with_data(&game_systems::render_fps, ctx).unwrap();
 
         // cleanup
         world.run(&core_systems::clean_dirty).unwrap();
@@ -295,10 +309,10 @@ impl GameState for Game {
         world.run_with_data(&core_systems::interpret_player_input_as_bump_intent, &data.input).unwrap();
 
         // bump semantics
-        world.run(&game_systems::bump__interpret_as_collect_item_intent).unwrap();
-        world.run(&game_systems::bump__interpret_as_door_unlock_intent).unwrap();
-        world.run_with_data(&game_systems::bump__open_doors, &mut data.map).unwrap();
-        world.run_with_data(&game_systems::bump__default, &data.map).unwrap();
+        world.run(&game_systems::on_bump_interpret_as_collect_item_intent).unwrap();
+        world.run(&game_systems::on_bump_interpret_as_door_unlock_intent).unwrap();
+        world.run_with_data(&game_systems::on_bump_open_doors, &mut data.map).unwrap();
+        world.run_with_data(&game_systems::on_bump_default, &data.map).unwrap();
 
         // unlock semantics
         world.run(&game_systems::unlock__if_has_key_for_door).unwrap();
@@ -306,6 +320,10 @@ impl GameState for Game {
 
         // collect semantics
         world.run(&game_systems::collect__default).unwrap();
+
+        // investigate semantics
+        world.run(&game_systems::investigate__lock).unwrap();
+        world.run(&game_systems::investigate__default).unwrap();
 
         // resolve directives
         world.run_with_data(&game_systems::resolve_move_directives, &data.map).unwrap();

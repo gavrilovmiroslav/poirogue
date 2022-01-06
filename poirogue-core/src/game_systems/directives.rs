@@ -13,12 +13,17 @@ pub struct MoveDirective(pub Point);
 
 pub fn resolve_move_directives(map: &Map,
                                mut positions: ViewMut<HasPosition>,
-                               mut dirty: ViewMut<IsDirty>,
-                               mut move_dirs: ViewMut<MoveDirective>,) {
+                               mut move_dirs: ViewMut<MoveDirective>,
+                               mut dirty: UniqueViewMut<IsDirty>,) {
 
-    for (id, (mut pos, mov)) in (&mut positions, &move_dirs).iter().with_id() {
+    let mut any_resolved = false;
+    for (mut pos, mov) in (&mut positions, &move_dirs).iter() {
         pos.0 = mov.0;
-        dirty.add_entity(id, IsDirty);
+        any_resolved = true;
+    }
+
+    if any_resolved {
+        dirty.0 = true;
     }
 
     move_dirs.clear();

@@ -2,7 +2,7 @@ use std::borrow::BorrowMut;
 use std::collections::VecDeque;
 use bracket_color::prelude::{BLACK, WHITE};
 use bracket_lib::prelude::{Algorithm2D, BTerm, field_of_view_set, VirtualKeyCode, Point, Input};
-use shipyard::{AddEntity, AllStoragesViewMut, EntitiesViewMut, EntityId, IntoIter, IntoWithId, View, ViewMut, World};
+use shipyard::{AddEntity, AllStoragesViewMut, EntitiesViewMut, EntityId, IntoIter, IntoWithId, UniqueView, UniqueViewMut, View, ViewMut, World};
 use bracket_color::prelude::RGB;
 use serde::{Serialize, Deserialize, Serializer, Deserializer};
 use serde::ser::{Error, SerializeStruct};
@@ -53,10 +53,12 @@ pub fn accept_meta_commands((input, comms): (&InputSnapshots, &mut VecDeque<Game
 pub fn update_dirty_fovs((store, map): (&Store, &Map),
                          positions: View<HasPosition>,
                          mut fovs: ViewMut<HasFieldOfView>,
-                         dirty: View<IsDirty>) {
+                         dirty: UniqueView<IsDirty>) {
 
-    for (pos, mut fov, _) in (&positions, &mut fovs, &dirty).iter() {
-        fov.0 = field_of_view_set(pos.0, store.get("fov").unwrap_or(16), map).into_iter().collect()
+    if dirty.0 {
+        for (pos, mut fov) in (&positions, &mut fovs).iter() {
+            fov.0 = field_of_view_set(pos.0, store.get("fov").unwrap_or(16), map).into_iter().collect()
+        }
     }
 }
 
@@ -64,10 +66,12 @@ pub fn update_dirty_fovs((store, map): (&Store, &Map),
 pub fn update_player_vision(map: &mut Map,
                             is_player: View<IsPlayer>,
                             fovs: View<HasFieldOfView>,
-                            dirty: View<IsDirty>) {
-    for (_, fov, _) in (&is_player, &fovs, &dirty).iter() {
-        map.hide();
-        map.show(&fov.0);
+                            dirty: UniqueView<IsDirty>) {
+    if dirty.0 {
+        for (_, fov) in (&is_player, &fovs).iter() {
+            map.hide();
+            map.show(&fov.0);
+        }
     }
 }
 
@@ -98,41 +102,27 @@ pub fn interpret_player_input_as_bump_intent(input: &InputSnapshots,
 pub fn update_stored_player_position(store: &mut Store,
                                      is_player: View<IsPlayer>,
                                      positions: View<HasPosition>,
-                                     dirty: View<IsDirty>,) {
-
-    for (_, pos, _) in (&is_player, &positions, &dirty).iter() {
-        store.set("player_position", &(pos.0.x, pos.0.y)).unwrap();
+                                     dirty: UniqueView<IsDirty>,
+                                     mut player_position: UniqueViewMut<PlayerPosition>,) {
+    if dirty.0 {
+        for (_, pos) in (&is_player, &positions).iter() {
+            player_position.0 = pos.0;
+        }
     }
 }
 
 
 pub fn render_map((map, store, ctx): (&mut Map, &mut Store, &mut BTerm),
-                  is_player: View<IsPlayer>,
-                  dirty: View<IsDirty>,) {
+                  dirty: UniqueView<IsDirty>,
+                  player_position: UniqueView<PlayerPosition>) {
 
-    fn render_map_layer(map: &mut Map, store: &Store, ctx: &mut BTerm) {
+    if dirty.0 {
         let view = store.get::<RenderView>("view")
             .unwrap_or(RenderView::Game);
 
-        ctx.set_active_console(0);
         ctx.cls();
-        map.render(ctx, &view, &store);
+        map.render(ctx, &view, &store, player_position.0);
     }
-
-    fn render_fps_count(ctx: &mut BTerm) {
-        ctx.set_active_console(2);
-        ctx.cls();
-        ctx.print_color(1, 1, named_color(WHITE), named_color(BLACK), format!("FPS: {}", ctx.fps));
-    }
-
-    let is_player_dirty = (&is_player, &dirty).iter().collect::<Vec<_>>().len() > 0;
-
-    if is_player_dirty || store.get("debug_render_dirty").unwrap_or(false) {
-        render_map_layer(map, store, ctx);
-        store.rem("debug_render_dirty").unwrap();
-    }
-
-    render_fps_count(ctx);
 }
 
 
@@ -140,19 +130,22 @@ pub fn render_characters((map, ctx): (&Map, &mut BTerm),
                          character: View<IsCharacter>,
                          positions: View<HasPosition>,
                          glyphs: View<HasGlyph>,
-                         invisible: View<IsInvisible>,) {
+                         invisible: View<IsInvisible>,
+                         dirty: UniqueView<IsDirty>,) {
 
-    for (_, has_pos, has_glyph, _) in (&character, &positions, &glyphs, !&invisible).iter() {
-        let glyph = has_glyph.0;
-        let pos = has_pos.0;
-        let index = map.point2d_to_index(pos);
-        if map.is_tile_revealed(index) && map.is_tile_visible(index) {
-            ctx.print_color(pos.x, pos.y, RGB::from(glyph.fg), RGB::from(glyph.bg), glyph.ch);
+    if dirty.0 {
+        for (_, has_pos, has_glyph, _) in (&character, &positions, &glyphs, !&invisible).iter() {
+            let glyph = has_glyph.0;
+            let pos = has_pos.0;
+            let index = map.point2d_to_index(pos);
+            if map.is_tile_revealed(index) && map.is_tile_visible(index) {
+                ctx.print_color(pos.x, pos.y, RGB::from(glyph.fg), RGB::from(glyph.bg), glyph.ch);
+            }
         }
     }
 }
 
 
-pub fn clean_dirty(mut dirty: ViewMut<IsDirty>) {
-    dirty.clear();
+pub fn clean_dirty(mut dirty: UniqueViewMut<IsDirty>) {
+    dirty.0 = false;
 }

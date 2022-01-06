@@ -12,6 +12,7 @@ use lru::{LruCache};
 use lazy_static::*;
 use std::sync::Mutex;
 use crate::colors::{Color, named_color, ColorShifter};
+use crate::entity::PlayerPosition;
 use crate::game::Store;
 use crate::rand_gen::get_random_between;
 
@@ -135,7 +136,7 @@ impl Map {
 }
 
 impl Map {
-    pub fn render(&self, ctx: &mut BTerm, view: &dyn View, store: &Store) {
+    pub fn render(&self, ctx: &mut BTerm, view: &dyn View, store: &Store, player_position: Point) {
         let mut index: usize = 0;
 
         let mut batch = DrawBatch::new();
@@ -152,7 +153,7 @@ impl Map {
             }
         } else {
             let noise = store.get::<Vec<f32>>("noise_map").unwrap();
-            let (xp, yp) = store.get::<(i32, i32)>("player_position").unwrap_or((0, 0));
+            let (xp, yp) = (player_position.x, player_position.y);
 
             for y in 0..self.height {
                 for x in 0..self.width {

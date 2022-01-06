@@ -16,3 +16,7 @@ pub struct CollectIntent {
     pub collector: EntityId,
     pub item: EntityId,
 }
+
+pub struct InvestigateIntent {
+    pub entity: EntityId,
+}

@@ -143,5 +143,6 @@ pub struct HasGlyph(pub Glyph);
 pub struct HasFieldOfView(pub Vec<Point>);
 pub struct IsInvisible;
 pub struct IsPlayer;
+pub struct PlayerPosition(pub Point);
 
-pub struct IsDirty;
+pub struct IsDirty(pub bool);
