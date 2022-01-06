@@ -284,13 +284,12 @@ impl GameState for Game {
 
         // meta
         world.run_with_data(&core_systems::accept_meta_commands, (&data.input, &mut data.commands)).unwrap();
-        world.run_with_data(&core_systems::update_stored_player_position, (&mut data.store));
+        world.run_with_data(&core_systems::update_stored_player_position, (&mut data.store)).unwrap();
         world.run_with_data(&core_systems::update_dirty_fovs, (&data.store, &data.map)).unwrap();
         world.run(&game_systems::update_notification_log_expiry).unwrap();
-
-        // rendering
         world.run_with_data(&core_systems::update_player_vision, &mut data.map).unwrap();
 
+        // rendering game
         ctx.set_active_console(0);
         world.run_with_data(&core_systems::render_map, (&mut data.map, &mut data.store, ctx)).unwrap();
         world.run_with_data(&game_systems::render_doors, (&data.map, ctx)).unwrap();
@@ -299,6 +298,7 @@ impl GameState for Game {
         world.run_with_data(&game_systems::render_items, (&data.map, ctx)).unwrap();
         world.run_with_data(&core_systems::render_characters, (&data.map, ctx)).unwrap();
 
+        // rendering gui
         ctx.set_active_console(2);
         ctx.cls();
         world.run_with_data(&game_systems::render_notification_log, ctx).unwrap();
