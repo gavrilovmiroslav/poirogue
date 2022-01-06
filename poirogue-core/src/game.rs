@@ -28,10 +28,9 @@ use crate::murder_gen::generate_murder;
 use crate::{core_systems, rand_gen};
 use crate::colors::named_color;
 use crate::core_systems::IsCharacter;
-use crate::entity::{HasFieldOfView, HasGlyph, HasPosition, IsDirty, IsPlayer, PlayerPosition};
+use crate::entity::{HasFieldOfView, HasGlyph, HasPosition, IsDirty, IsPlayer, PlayerPosition, Time};
 use crate::glyph::Glyph;
 use crate::json::JsonFields;
-//use crate::entity::{AbstractEntity, Entity};
 use crate::opt::Opt;
 use crate::rand_gen::{get_random_between, get_random_from, get_random_sub};
 use crate::rex::draw_rex;
@@ -46,7 +45,6 @@ pub type Store = PickleDb;
 
 pub struct Game {
     pub data: GameData,
-    time: i64,
 }
 
 pub struct GameData {
@@ -118,10 +116,6 @@ impl GameData {
 
             self.store.set("noise_map", &noise)
                 .expect("Failed storing noise map");
-        }
-
-        { /* TIME */
-            self.store.set("time", &0.0);
         }
     }
 
@@ -220,7 +214,7 @@ impl GameData {
 
 impl Game {
     pub fn new(w: i32, h: i32, args: &Opt) -> Game {
-        Game { data: GameData::new(w, h, args), time: 0 }
+        Game { data: GameData::new(w, h, args) }
     }
 
     pub fn run(args: Opt) {
@@ -254,28 +248,21 @@ impl Game {
         let mut game = Game::new(width, height, &args);
 
         game.data.setup_store();
+
+        game.data.world.add_unique(Time(0u64));
         game.data.world.add_unique(IsDirty(true));
         game.data.world.add_unique(PlayerPosition(Point::new(0, 0)));
-        game.data.world.add_unique(NotificationLog::new(3, 360)); // TODO: don't hardcode
+        game.data.world.add_unique(NotificationLog::new(args.log_height, args.log_expiry));
 
         game.data.commands.push_back(GameCommand::Flow(FlowCommand::ReloadViewConfigs));
         game.data.commands.push_back(GameCommand::Flow(FlowCommand::GenerateLevel));
 
         main_loop(term, game).unwrap();
     }
-
-    fn update_time(&mut self) {
-        let mut time = self.data.store.get::<f32>("time").unwrap();
-        time += 1.0;
-        self.data.store.set::<f32>("time", &time).expect("Failed storing time");
-    }
 }
 
 impl GameState for Game {
     fn tick(&mut self, ctx: &mut BTerm) {
-        self.update_time();
-        self.time += 1;
-
         self.data.resolve_command_queue(ctx);
         self.data.input.make_new_snapshots(INPUT.lock().borrow());
 
@@ -284,7 +271,9 @@ impl GameState for Game {
 
         // meta
         world.run_with_data(&core_systems::accept_meta_commands, (&data.input, &mut data.commands)).unwrap();
-        world.run_with_data(&core_systems::update_stored_player_position, (&mut data.store)).unwrap();
+
+        world.run(&core_systems::update_time).unwrap();
+        world.run(&core_systems::update_player_position).unwrap();
         world.run_with_data(&core_systems::update_dirty_fovs, (&data.store, &data.map)).unwrap();
         world.run(&game_systems::update_notification_log_expiry).unwrap();
         world.run_with_data(&core_systems::update_player_vision, &mut data.map).unwrap();

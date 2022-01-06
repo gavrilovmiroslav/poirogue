@@ -11,4 +11,8 @@ pub struct Opt {
     pub skip_binarize_on_boot: bool,
     #[structopt(short = "d", long, default_value = "resources/data")]
     pub data_directory: String,
+    #[structopt(short = "l", long, default_value = "3")]
+    pub log_height: usize,
+    #[structopt(short = "t", long, default_value = "360")]
+    pub log_expiry: u32,
 }

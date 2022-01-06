@@ -136,7 +136,7 @@ impl Map {
 }
 
 impl Map {
-    pub fn render(&self, ctx: &mut BTerm, view: &dyn View, store: &Store, player_position: Point) {
+    pub fn render(&self, ctx: &mut BTerm, view: &dyn View, store: &Store, player_position: Point, time: u64) {
         let mut index: usize = 0;
 
         let mut batch = DrawBatch::new();
@@ -166,7 +166,7 @@ impl Map {
                             dx * dx + dy * dy
                         } / 100.0).clamp(0.0, 1.0) * 0.25;
 
-                        let time = store.get::<f32>("time").unwrap() * 0.01;
+                        let time = (time as f32) * 0.01;
 
                         let speed = 0.5 + noise[index];
                         let norm = f32::sin(time * speed) + 1.0;                              // 0 .. 1

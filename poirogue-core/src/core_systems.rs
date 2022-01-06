@@ -2,7 +2,7 @@ use std::borrow::BorrowMut;
 use std::collections::VecDeque;
 use bracket_color::prelude::{BLACK, WHITE};
 use bracket_lib::prelude::{Algorithm2D, BTerm, field_of_view_set, VirtualKeyCode, Point, Input};
-use shipyard::{AddEntity, AllStoragesViewMut, EntitiesViewMut, EntityId, IntoIter, IntoWithId, UniqueView, UniqueViewMut, View, ViewMut, World};
+use shipyard::{AddEntity, AllStoragesViewMut, EntitiesViewMut, EntityId, IntoIter, IntoWithId, Unique, UniqueView, UniqueViewMut, View, ViewMut, World};
 use bracket_color::prelude::RGB;
 use serde::{Serialize, Deserialize, Serializer, Deserializer};
 use serde::ser::{Error, SerializeStruct};
@@ -98,12 +98,15 @@ pub fn interpret_player_input_as_bump_intent(input: &InputSnapshots,
     }
 }
 
+pub fn update_time(mut time: UniqueViewMut<Time>,) {
+    time.0 += 1;
+}
 
-pub fn update_stored_player_position(store: &mut Store,
-                                     is_player: View<IsPlayer>,
-                                     positions: View<HasPosition>,
-                                     dirty: UniqueView<IsDirty>,
-                                     mut player_position: UniqueViewMut<PlayerPosition>,) {
+pub fn update_player_position(is_player: View<IsPlayer>,
+                              positions: View<HasPosition>,
+                              dirty: UniqueView<IsDirty>,
+                              mut player_position: UniqueViewMut<PlayerPosition>,) {
+
     if dirty.0 {
         for (_, pos) in (&is_player, &positions).iter() {
             player_position.0 = pos.0;
@@ -114,14 +117,15 @@ pub fn update_stored_player_position(store: &mut Store,
 
 pub fn render_map((map, store, ctx): (&mut Map, &mut Store, &mut BTerm),
                   dirty: UniqueView<IsDirty>,
-                  player_position: UniqueView<PlayerPosition>) {
+                  player_position: UniqueView<PlayerPosition>,
+                  time: UniqueView<Time>) {
 
     if dirty.0 {
         let view = store.get::<RenderView>("view")
             .unwrap_or(RenderView::Game);
 
         ctx.cls();
-        map.render(ctx, &view, &store, player_position.0);
+        map.render(ctx, &view, &store, player_position.0, time.0);
     }
 }
 

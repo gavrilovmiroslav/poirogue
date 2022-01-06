@@ -144,5 +144,5 @@ pub struct HasFieldOfView(pub Vec<Point>);
 pub struct IsInvisible;
 pub struct IsPlayer;
 pub struct PlayerPosition(pub Point);
-
+pub struct Time(pub(crate) u64);
 pub struct IsDirty(pub bool);
