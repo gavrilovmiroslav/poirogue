@@ -121,7 +121,9 @@ pub fn on_bump_open_doors(map: &mut Map,
                           mut bump_intents: ViewMut<Handle<BumpIntent>>,
                           mut dirty: UniqueViewMut<IsDirty>, ) {
 
-    for mut bump in (&mut bump_intents).iter() {
+    for mut bump in (&mut bump_intents).iter()
+        .filter(|b| !b.handled) {
+
         for (_, mut door, mut glyph, pos) in (!&locked, &mut doors, &mut has_glyph, &has_position).iter()
             .filter(|(_, d, _, p)| d.0) {
 
@@ -176,7 +178,9 @@ pub fn on_unlock_default(mut unlock_intents: ViewMut<Handle<UnlockIntent>>,
                          mut investigate_intents: ViewMut<Handle<InvestigateIntent>>,
                          mut entities: EntitiesViewMut,) {
 
-    for mut unlock_intent in (&mut unlock_intents).iter().filter(|u| !u.handled) {
+    for mut unlock_intent in (&mut unlock_intents).iter()
+        .filter(|u| !u.handled) {
+
         entities.add_entity((&mut investigate_intents,), (Handle::new(InvestigateIntent{ entity:  unlock_intent.intent.target }),));
         unlock_intent.handled = true;
     }
