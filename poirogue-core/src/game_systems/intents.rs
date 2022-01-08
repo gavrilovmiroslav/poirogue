@@ -2,8 +2,6 @@ use bracket_lib::prelude::Point;
 use crate::tiles::TileIndex;
 use shipyard::{AllStoragesViewMut, EntitiesViewMut, EntityId, IntoIter, IntoWithId, Not, SparseSet, Storage, View, ViewMut};
 
-pub struct Unresolved;
-
 pub struct Handle<T> {
     pub intent: T,
     pub handled: bool,
@@ -23,7 +21,6 @@ impl<T> Handle<T> {
 }
 
 pub fn propagate_handled_intents<T: 'static + Send + Sync>(mut storage: &mut AllStoragesViewMut,) {
-
     let mut deleted = Vec::new();
     for (id, h) in (&storage.borrow::<View<Handle<T>>>().unwrap())
         .iter().with_id().filter(|(_, h)| h.handled) {
@@ -43,7 +40,7 @@ pub fn propagate_handled_and_delete_rest<T: 'static + Send + Sync>(mut storage: 
     propagate_handled_intents::<T>(&mut storage);
 
     let mut deleted = Vec::new();
-    for (id, _) in (&storage.borrow::<View<Handle<T>>>().unwrap()).iter().with_id().filter(|(_, h)| h.handled) {
+    for (id, _) in (&storage.borrow::<View<Handle<T>>>().unwrap()).iter().with_id() {
         deleted.push(id);
     }
 
