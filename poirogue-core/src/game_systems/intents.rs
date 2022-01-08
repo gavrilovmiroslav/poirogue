@@ -45,9 +45,9 @@ pub fn propagate_handled_and_delete_rest<T: 'static + Send + Sync>(mut storage: 
     }
 
     for id in deleted {
-        &storage.borrow::<ViewMut<Handle<T>>>().unwrap().delete(id);
-        &storage.borrow::<ViewMut<Handle<T>>>().unwrap().remove(id);
-        &storage.borrow::<EntitiesViewMut>().unwrap().delete_unchecked(id);
+        let _ = &storage.borrow::<ViewMut<Handle<T>>>().unwrap().delete(id);
+        let _ = &storage.borrow::<ViewMut<Handle<T>>>().unwrap().remove(id);
+        let _ = &storage.borrow::<EntitiesViewMut>().unwrap().delete_unchecked(id);
     }
 
     storage.delete_any::<SparseSet<Handle<T>>>();

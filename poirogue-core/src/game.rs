@@ -252,10 +252,10 @@ impl Game {
 
         game.data.setup_store();
 
-        game.data.world.add_unique(Time(0u64));
-        game.data.world.add_unique(IsDirty(true));
-        game.data.world.add_unique(PlayerPosition(Point::new(0, 0)));
-        game.data.world.add_unique(NotificationLog::new(args.log_height, args.log_expiry));
+        game.data.world.add_unique(Time(0u64)).unwrap();
+        game.data.world.add_unique(IsDirty(true)).unwrap();
+        game.data.world.add_unique(PlayerPosition(Point::new(0, 0))).unwrap();
+        game.data.world.add_unique(NotificationLog::new(args.log_height, args.log_expiry)).unwrap();
 
         game.data.commands.push_back(GameCommand::Flow(FlowCommand::ReloadViewConfigs));
         game.data.commands.push_back(GameCommand::Flow(FlowCommand::GenerateLevel));
@@ -337,10 +337,10 @@ fn log_memory_usage<T: Send + Sync + 'static>(world: &World, usage_log: &mut Sto
         let name = usage.storage_name.to_string();
 
         if !usage_log.lexists(name.as_str()) {
-            usage_log.lcreate(name.as_str());
-            usage_log.lcreate(format!("{}:allocated_memory", name).as_str());
-            usage_log.lcreate(format!("{}:used_memory", name).as_str());
-            usage_log.lcreate(format!("{}:component_count", name).as_str());
+            usage_log.lcreate(name.as_str()).unwrap();
+            usage_log.lcreate(format!("{}:allocated_memory", name).as_str()).unwrap();
+            usage_log.lcreate(format!("{}:used_memory", name).as_str()).unwrap();
+            usage_log.lcreate(format!("{}:component_count", name).as_str()).unwrap();
         }
 
         usage_log.ladd(format!("{}:allocated_memory", name.as_str()).as_str(),  &usage.allocated_memory_bytes);
@@ -361,5 +361,5 @@ fn log_overall_memory_usage(world: &World, usage_log: &mut Store) {
     log_memory_usage::<HasPosition>(world, usage_log);
     log_memory_usage::<IsCharacter>(world, usage_log);
 
-    usage_log.dump();
+    usage_log.dump().unwrap();
 }
