@@ -1,10 +1,10 @@
 use bracket_lib::prelude::{Point, Algorithm2D, BTerm, RED, DARK_RED, DARK_GRAY, GOLD, DARK_GOLDENROD, CRIMSON, BLACK, WHITE, ORANGE, DARK_ORANGE, YELLOW, GREEN, DARK_GREEN};
-use shipyard::{AddEntity, AllStoragesViewMut, EntitiesViewMut, EntityId, Get, IntoIter, IntoWithId, Remove, Storage, UniqueView, UniqueViewMut, View, ViewMut};
+use shipyard::{AddEntity, AllStoragesViewMut, EntitiesViewMut, EntityId, Get, IntoIter, IntoWithId, Remove, SparseSet, Storage, UniqueView, UniqueViewMut, View, ViewMut};
 use crate::colors::{ColorShifter, named_color};
 use crate::entity::{HasGlyph, HasPosition, IsDirty, IsPlayer};
 use crate::game::Store;
 use crate::game_systems::directives::MoveDirective;
-use crate::game_systems::{CarriesItem, Handle, InvestigateIntent, IsItem, NotificationLog, UnlockDirective};
+use crate::game_systems::{CarriesItem, Handle, InvestigateIntent, IsItem, NotificationLog, propagate_handled_and_delete_rest, propagate_handled_intents, UnlockDirective};
 use crate::game_systems::intents::{BumpIntent, UnlockIntent};
 use crate::map::Map;
 use crate::tiles::{MapTile, TileIndex};
@@ -92,7 +92,6 @@ pub fn render_known_locked_doors((map, ctx): (&Map, &mut BTerm),
     }
 }
 
-
 pub fn on_bump_interpret_as_door_unlock_intent(doors: View<IsDoor>,
                                              locked: View<IsLocked>,
                                              has_position: View<HasPosition>,
@@ -100,14 +99,13 @@ pub fn on_bump_interpret_as_door_unlock_intent(doors: View<IsDoor>,
                                              mut unlock_intents: ViewMut<Handle<UnlockIntent>>,
                                              mut entities: EntitiesViewMut,) {
 
-    for mut bump in (&mut bump_intents).iter()
-        .filter(|b| !b.handled) {
+    for (bump_id, mut bump) in (&mut bump_intents).iter().with_id()
+        .filter(|(_, b)| !b.handled) {
 
         for (door_id, (_, _, pos)) in (&doors, &locked, &has_position).iter().with_id() {
             if bump.intent.pos != pos.0 { continue; }
 
-            entities.add_entity((&mut unlock_intents, ), (Handle::new(UnlockIntent { entity: bump.intent.bumper, target: door_id }), ));
-            bump.handled = true;
+            entities.add_entity((&mut unlock_intents, ), (bump.spawn(bump_id, UnlockIntent { entity: bump.intent.bumper, target: door_id }), ));
         }
     }
 }
@@ -137,6 +135,18 @@ pub fn on_bump_open_doors(map: &mut Map,
             dirty.0 = true;
             bump.handled = true;
         }
+    }
+}
+
+
+pub fn on_bump_interpret_as_investigate_intent(mut bump_intents: ViewMut<Handle<BumpIntent>>,
+                                               mut investigate_intents: ViewMut<Handle<InvestigateIntent>>,
+                                               mut entities: EntitiesViewMut,) {
+
+    for (bump_id, mut bump) in (&mut bump_intents).iter().with_id()
+        .filter(|(_, b)| !b.handled) {
+
+        entities.add_entity((&mut investigate_intents,), (bump.spawn(bump_id, InvestigateIntent{ pos: bump.intent.pos }),));
     }
 }
 
@@ -174,43 +184,38 @@ pub fn on_unlock_if_has_key_for_door(items: View<IsItem>,
 }
 
 
-pub fn on_unlock_default(mut unlock_intents: ViewMut<Handle<UnlockIntent>>,
-                         mut investigate_intents: ViewMut<Handle<InvestigateIntent>>,
-                         mut entities: EntitiesViewMut,) {
+pub fn on_unlock_default(mut storage: AllStoragesViewMut) {
 
-    for mut unlock_intent in (&mut unlock_intents).iter()
-        .filter(|u| !u.handled) {
-
-        entities.add_entity((&mut investigate_intents,), (Handle::new(InvestigateIntent{ entity:  unlock_intent.intent.target }),));
-        unlock_intent.handled = true;
-    }
+    propagate_handled_and_delete_rest::<UnlockIntent>(&mut storage);
 }
 
-pub fn on_investigate_lock(mut investigate_intents: ViewMut<Handle<InvestigateIntent>>,
+pub fn on_investigate_lock(has_pos: View<HasPosition>,
                            is_locked: View<IsLocked>,
                            is_item: View<IsItem>,
                            mut known: ViewMut<IsKnown>,
+                           mut investigate_intents: ViewMut<Handle<InvestigateIntent>>,
                            mut log: UniqueViewMut<NotificationLog>,
                            mut dirty: UniqueViewMut<IsDirty>,) {
 
     for mut investigation in (&mut investigate_intents).iter()
         .filter(|i| !i.handled) {
 
-        if let Ok(lock) = (&is_locked).get(investigation.intent.entity) {
+        let pos = investigation.intent.pos;
+
+        for (id, (pos, lock)) in (&has_pos, &is_locked).iter().with_id() {
+            if pos.0 != investigation.intent.pos { continue; }
+
             if let Ok(key) = (&is_item).get(lock.key) {
                 log.write(format!("You need the {} to open this lock.", key.item));
                 dirty.0 = true;
 
-                known.add_entity(investigation.intent.entity, IsKnown);
+                known.add_entity(id, IsKnown);
                 investigation.handled = true;
             }
         }
     }
 }
 
-pub fn on_investigate_default(mut investigate_intents: ViewMut<Handle<InvestigateIntent>>,) {
-
-    for mut investigation in (&mut investigate_intents).iter() {
-        investigation.handled = true;
-    }
+pub fn on_investigate_default(mut storage: AllStoragesViewMut) {
+    propagate_handled_and_delete_rest::<InvestigateIntent>(&mut storage);
 }

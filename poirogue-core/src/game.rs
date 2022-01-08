@@ -38,7 +38,7 @@ use crate::tiles::{MapTile, MapTileRep, TileIndex};
 use crate::render_view::{RenderViewDefinition};
 use crate::render_view::*;
 use crate::game_systems;
-use crate::game_systems::{BumpIntent, CollectIntent, Handle, InvestigateIntent, IsDoor, IsItem, IsLocked, Item, MoveDirective, NotificationLog, ObjectUsedUp, UnlockDirective, UnlockIntent};
+use crate::game_systems::{BumpIntent, CollectIntent, Handle, InvestigateIntent, IsDoor, IsItem, IsLocked, Item, MoveDirective, NotificationLog, ObjectUsedUp, on_bump_interpret_as_investigate_intent, UnlockDirective, UnlockIntent};
 
 pub type Store = PickleDb;
 
@@ -302,22 +302,20 @@ impl GameState for Game {
         // input
         world.run_with_data(&core_systems::interpret_player_input_as_bump_intent, &data.input).unwrap();
 
-        // bump semantics
         world.run(&game_systems::on_bump_interpret_as_collect_item_intent).unwrap();
-        world.run(&game_systems::on_bump_interpret_as_door_unlock_intent).unwrap();
-        world.run_with_data(&game_systems::on_bump_open_doors, &mut data.map).unwrap();
-        world.run_with_data(&game_systems::on_bump_default, &data.map).unwrap();
+        world.run(&game_systems::on_collect_if_possible).unwrap();
+        world.run(&game_systems::on_collect_default).unwrap();
 
-        // unlock semantics
+        world.run(&game_systems::on_bump_interpret_as_door_unlock_intent).unwrap();
         world.run(&game_systems::on_unlock_if_has_key_for_door).unwrap();
         world.run(&game_systems::on_unlock_default).unwrap();
 
-        // collect semantics
-        world.run(&game_systems::on_collect_default).unwrap();
-
-        // investigate semantics
+        world.run(&game_systems::on_bump_interpret_as_investigate_intent).unwrap();
         world.run(&game_systems::on_investigate_lock).unwrap();
         world.run(&game_systems::on_investigate_default).unwrap();
+
+        world.run_with_data(&game_systems::on_bump_open_doors, &mut data.map).unwrap();
+        world.run_with_data(&game_systems::on_bump_default, &data.map).unwrap();
 
         // resolve directives
         world.run(&game_systems::resolve_unlock_directive).unwrap();

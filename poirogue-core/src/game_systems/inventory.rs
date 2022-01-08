@@ -3,12 +3,12 @@ use std::collections::HashSet;
 use std::ops::Index;
 use bracket_color::prelude::{BLACK, DARK_GRAY};
 use bracket_lib::prelude::{Point, Algorithm2D, BTerm};
-use shipyard::{AddEntity, AllStoragesViewMut, EntitiesViewMut, EntityId, Get, IntoIter, IntoWithId, Not, Remove, Storage, UniqueView, UniqueViewMut, View, ViewMut};
+use shipyard::{AddEntity, AllStoragesViewMut, EntitiesViewMut, EntityId, Get, IntoIter, IntoWithId, Not, Remove, SparseSet, Storage, UniqueView, UniqueViewMut, View, ViewMut};
 use crate::colors::{ColorShifter, named_color};
 use crate::core_systems::IsCharacter;
 use crate::entity::{HasGlyph, HasPosition, IsDirty, IsInvisible};
 use crate::game::Store;
-use crate::game_systems::{BumpIntent, CollectIntent, Handle, MoveDirective, NotificationLog};
+use crate::game_systems::{BumpIntent, CollectIntent, Handle, MoveDirective, NotificationLog, propagate_handled_and_delete_rest, propagate_handled_intents};
 use crate::map::Map;
 use crate::tiles::{MapTile, TileIndex};
 
@@ -50,8 +50,8 @@ pub fn on_bump_interpret_as_collect_item_intent(items: View<IsItem>,
                                                 mut collect_intents: ViewMut<Handle<CollectIntent>>,
                                                 mut entities: EntitiesViewMut,) {
 
-    for mut bump in (&mut bump_intents).iter().
-        filter(|b| !b.handled) {
+    for (bump_id, mut bump) in (&mut bump_intents).iter().with_id().
+        filter(|(_, b)| !b.handled) {
 
         for (item_id, (_, pos)) in (&items, &has_position).iter().with_id()
             .filter(|(_, (i, _))| !i.is_collected) {
@@ -59,21 +59,19 @@ pub fn on_bump_interpret_as_collect_item_intent(items: View<IsItem>,
             if pos.0 != bump.intent.pos { continue; }
 
             entities.add_entity((&mut collect_intents, ),
-                (Handle::new(CollectIntent{ collector: bump.intent.bumper, item: item_id }), ));
-
-            bump.handled = true;
+                (bump.spawn(bump_id, CollectIntent{ collector: bump.intent.bumper, item: item_id }), ));
         }
     }
 }
 
 
-pub fn on_collect_default(mut items: ViewMut<IsItem>,
-                          mut has_position: ViewMut<HasPosition>,
-                          mut carries_item: ViewMut<CarriesItem>,
-                          mut collect_intents: ViewMut<Handle<CollectIntent>>,
-                          mut log: UniqueViewMut<NotificationLog>,
-                          mut is_dirty: UniqueViewMut<IsDirty>,
-                          mut entities: EntitiesViewMut,) {
+pub fn on_collect_if_possible(mut items: ViewMut<IsItem>,
+                              mut has_position: ViewMut<HasPosition>,
+                              mut carries_item: ViewMut<CarriesItem>,
+                              mut collect_intents: ViewMut<Handle<CollectIntent>>,
+                              mut log: UniqueViewMut<NotificationLog>,
+                              mut is_dirty: UniqueViewMut<IsDirty>,
+                              mut entities: EntitiesViewMut,) {
 
     for mut collect in (&mut collect_intents).iter().
         filter(|c| !c.handled) {
@@ -91,4 +89,8 @@ pub fn on_collect_default(mut items: ViewMut<IsItem>,
         is_dirty.0 = true;
         collect.handled = true;
     }
+}
+
+pub fn on_collect_default(mut storage: AllStoragesViewMut) {
+    propagate_handled_and_delete_rest::<CollectIntent>(&mut storage);
 }
