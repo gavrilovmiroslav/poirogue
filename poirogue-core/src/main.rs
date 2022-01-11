@@ -21,6 +21,8 @@ mod colors;
 mod core_systems;
 mod json;
 mod game_systems;
+mod maybe;
+mod diagnostics;
 
 embedded_resource!(TILE_FONT, "../resources/classic_roguelike_white.png");
 embedded_resource!(IMAGE_FONT, "../resources/MRMOTEXTEX_rexpaintx2.png");

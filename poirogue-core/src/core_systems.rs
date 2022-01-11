@@ -9,7 +9,7 @@ use serde::ser::{Error, SerializeStruct};
 use crate::colors::named_color;
 use crate::commands::{FlowCommand, GameCommand, HackCommand};
 use crate::entity::*;
-use crate::game::{GameData, Store};
+use crate::game::{Store};
 use crate::input::{InputSnapshot, InputSnapshots};
 use crate::map::Map;
 use crate::game_systems::directives::MoveDirective;

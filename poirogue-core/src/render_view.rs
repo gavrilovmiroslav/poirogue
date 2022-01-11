@@ -9,7 +9,6 @@ use lazy_static::*;
 use std::sync::Mutex;
 use bracket_color::prelude::{BLACK, DARK_CYAN, DARK_GRAY, GREEN, RED, WHITE};
 use crate::colors::{Color, ColorShifter, named_color};
-use crate::game::GameData;
 
 lazy_static! {
     static ref VIEW_REP_LRU: Mutex<LruCache<RenderView, MapTileRep>> = Mutex::new(LruCache::new(2));

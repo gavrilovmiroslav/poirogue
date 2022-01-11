@@ -1,6 +1,6 @@
 use serde::{de, Serialize};
 
-pub trait JsonFields {
+pub trait InternalJsonStorage {
     fn get_json<T>(&self, name: &str) -> Option<T>
         where for <'a> T: de::Deserialize<'a>;
 
