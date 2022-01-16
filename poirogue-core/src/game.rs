@@ -26,7 +26,7 @@ use crate::commands::{ActionCommand, FlowCommand, GameCommand, GameFlow, HackCom
 use crate::input::{InputSnapshotState, InputSnapshot, KeyboardSnapshot, InputSnapshots, MouseSnapshot};
 use crate::map_gen::run_map_gen;
 use crate::murder_gen::generate_murder;
-use crate::{core_systems, rand_gen};
+use crate::{core_systems, DRAWING_CONSOLE_LAYER, MAP_CONSOLE_LAYER, rand_gen, UI_CONSOLE_LAYER};
 use crate::colors::named_color;
 use crate::core_systems::IsCharacter;
 use crate::entity::{HasFieldOfView, HasGlyph, HasPosition, IsDirty, IsPlayer, PlayerPosition, Time};
@@ -55,6 +55,7 @@ pub struct MemoryUsageLog(pub(crate) PickleDb);
 pub struct WindowSize(pub (i32, i32));
 
 pub struct Binary(Box<dyn Cave>);
+pub struct Batch(pub(crate) Reusable<'static, DrawBatch>);
 
 pub struct Game {
     pub debug: bool,
@@ -185,6 +186,7 @@ impl Game {
             Box::new(FileCave::new(Path::new(args.data_directory.as_str())).unwrap())
         })).expect("Added Binary");
 
+        game.world.add_unique(Batch(DrawBatch::new())).unwrap();
         game.world.add_unique(Time(0u64)).unwrap();
         game.world.add_unique(IsDirty(true)).unwrap();
         game.world.add_unique(PlayerPosition(Point::new(0, 0))).unwrap();
@@ -199,8 +201,8 @@ impl Game {
         game.world.add_unique(VecDeque::<UnlockDirective>::new()).unwrap();
 
         Workload::builder("input handlers")
-            .with_system(&core_systems::on_input_keyboard_exit)
-            .with_system(&core_systems::on_input_keyboard_generate_level)
+            .with_system(&game_systems::on_input_keyboard_exit)
+            .with_system(&game_systems::on_input_keyboard_generate_level)
             .add_to_world(&game.world).unwrap();
 
         Workload::builder("game command interpretations")
@@ -255,29 +257,34 @@ impl Game {
             .with_workload("resolve directives")
             .add_to_world(&game.world).unwrap();
 
+        Workload::builder("render game")
+            .with_system(&core_systems::render_player_field_of_view)
+            .with_system(&game_systems::render_doors)
+            .with_system(&game_systems::render_locked_doors)
+            .with_system(&game_systems::render_known_locked_doors)
+            .with_system(&core_systems::render_player_visible_characters)
+            .with_system(&game_systems::render_items)
+            .add_to_world(&game.world).unwrap();
+
         main_loop(term, game).unwrap();
     }
 }
 
 impl GameState for Game {
     fn tick(&mut self, ctx: &mut BTerm) {
-        // meta
-        self.world.run(&core_systems::make_input_snapshots).unwrap();
-        self.world.run_workload("input handlers").unwrap();
-
-        { // interpret game commands
+        fn process_game_commands(game: &mut Game) {
             let mut more_commands = true;
 
             while more_commands {
-                let command_count = self.world.borrow::<UniqueView<VecDeque<GameCommand>>>().unwrap().len();
-                self.world.run_workload("game command interpretations").unwrap();
-                let new_command_count = self.world.borrow::<UniqueView<VecDeque<GameCommand>>>().unwrap().len();
+                let command_count = game.world.borrow::<UniqueView<VecDeque<GameCommand>>>().unwrap().len();
+                game.world.run_workload("game command interpretations").unwrap();
+                let new_command_count = game.world.borrow::<UniqueView<VecDeque<GameCommand>>>().unwrap().len();
 
                 if command_count == new_command_count && command_count > 0 {
                     println!("Warning: removing uninterpreted game command {:?}",
-                             *self.world.borrow::<UniqueView<VecDeque<GameCommand>>>().unwrap().front().unwrap());
+                             *game.world.borrow::<UniqueView<VecDeque<GameCommand>>>().unwrap().front().unwrap());
 
-                    self.world.borrow::<UniqueViewMut<VecDeque<GameCommand>>>().unwrap().pop_front();
+                    game.world.borrow::<UniqueViewMut<VecDeque<GameCommand>>>().unwrap().pop_front();
                     more_commands = false;
                 } else if new_command_count == 0 {
                     more_commands = false;
@@ -285,24 +292,27 @@ impl GameState for Game {
             }
         }
 
+        // meta
+        self.world.run(&game_systems::make_input_snapshots).unwrap();
+        self.world.run_workload("input handlers").unwrap();
+
+        process_game_commands(self);
+
         self.world.run(&core_systems::update_time).unwrap();
         self.world.run_workload("realtime updates").unwrap();
 
         if self.world.borrow::<UniqueView<IsDirty>>().unwrap().0 {
+            ctx.set_active_console(MAP_CONSOLE_LAYER); ctx.cls();
+            ctx.set_active_console(DRAWING_CONSOLE_LAYER); ctx.cls();
             self.world.run_workload("dirty-only updates").unwrap();
 
-            // rendering game
-            self.world.run_with_data(&core_systems::clear_game_layers, ctx).unwrap();
-            self.world.run_with_data(&core_systems::render_map, ctx).unwrap();
-            self.world.run_with_data(&game_systems::render_doors, ctx).unwrap();
-            self.world.run_with_data(&game_systems::render_locked_doors, ctx).unwrap();
-            self.world.run_with_data(&game_systems::render_known_locked_doors, ctx).unwrap();
-            self.world.run_with_data(&game_systems::render_items, ctx).unwrap();
-            self.world.run_with_data(&core_systems::render_characters, ctx).unwrap();
+            { self.world.borrow::<UniqueViewMut<Batch>>().unwrap().0.cls(); }
+
+            self.world.run_workload("render game").unwrap();
+            self.world.run_with_data(&core_systems::submit_draw_batching, ctx).unwrap();
         }
 
-        // rendering gui every frame
-        self.world.run_with_data(&core_systems::clear_ui_layer, ctx).unwrap();
+        ctx.set_active_console(UI_CONSOLE_LAYER); ctx.cls();
         self.world.run_with_data(&game_systems::render_fps, ctx).unwrap();
         self.world.run_with_data(&game_systems::render_notification_log, ctx).unwrap();
 

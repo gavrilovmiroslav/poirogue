@@ -1,16 +1,16 @@
 use std::collections::{HashSet, VecDeque};
 use std::collections::hash_map::RandomState;
 use bracket_terminal::prelude::INPUT;
-use bracket_color::prelude::{BLACK, WHITE};
-use bracket_lib::prelude::{Algorithm2D, BTerm, field_of_view_set, VirtualKeyCode, Point, Input};
-use shipyard::{AddEntity, AllStoragesViewMut, EntitiesViewMut, EntityId, IntoIter, IntoWithId, Storage, Unique, UniqueView, UniqueViewMut, View, ViewMut, World};
+use bracket_color::prelude::{BLACK, ColorPair, WHITE};
+use bracket_lib::prelude::{Algorithm2D, BTerm, field_of_view_set, VirtualKeyCode, Point, Input, DrawBatch};
+use shipyard::{AddEntity, AllStoragesViewMut, EntitiesViewMut, EntityId, Get, IntoIter, IntoWithId, Storage, Unique, UniqueView, UniqueViewMut, View, ViewMut, World};
 use bracket_color::prelude::RGB;
 use serde::{Serialize, Deserialize, Serializer, Deserializer};
 use serde::ser::{Error, SerializeStruct};
 use crate::colors::named_color;
 use crate::commands::{FlowCommand, GameCommand, HackCommand};
 use crate::entity::*;
-use crate::game::{FlagExit, Store, WindowSize};
+use crate::game::{Batch, FlagExit, Store, WindowSize};
 use crate::input::{InputSnapshot, InputSnapshots, KeyboardSnapshot, MouseSnapshot};
 use crate::map::Map;
 use crate::game_systems::directives::MoveDirective;
@@ -24,6 +24,7 @@ use crate::render_view::RenderView;
 use crate::tiles::{MapTile, TileIndex};
 
 pub struct IsCharacter;
+pub struct HasSight(u8);
 
 pub fn on_command_generate_level(mut storages: AllStoragesViewMut,) {
     use GameCommand::*;
@@ -79,38 +80,20 @@ pub fn on_command_generate_level(mut storages: AllStoragesViewMut,) {
     }
 }
 
-pub fn make_input_snapshots(mut keyboard: UniqueViewMut<KeyboardSnapshot>,
-                            mut mouse: UniqueViewMut<MouseSnapshot>) {
-    use std::borrow::Borrow;
-    keyboard.update(INPUT.lock().borrow());
-    mouse.update(INPUT.lock().borrow());
+pub fn update_time(mut time: UniqueViewMut<Time>,) {
+    time.0 += 1;
 }
 
-pub fn on_input_keyboard_generate_level(keyboard: UniqueView<KeyboardSnapshot>,
-                                        mut commands: UniqueViewMut<VecDeque<GameCommand>>,) {
-    if keyboard.is_pressed(VirtualKeyCode::F4) {
-        commands.push_back(GameCommand::Flow(FlowCommand::GenerateLevel));
-    }
-}
-
-pub fn on_input_keyboard_exit(keyboard: UniqueView<KeyboardSnapshot>,
-                              mut exit: UniqueViewMut<FlagExit>,) {
-
-    if keyboard.is_released(VirtualKeyCode::Escape) {
-        exit.0 = true;
-    }
-}
-
-pub fn update_fields_of_view(store: UniqueView<Store>,
-                             map: UniqueView<Map>,
+pub fn update_fields_of_view(map: UniqueView<Map>,
                              positions: View<HasPosition>,
+                             sights: View<HasSight>,
                              mut fovs: ViewMut<HasFieldOfView>,) {
 
-    for (pos, mut fov) in (&positions, &mut fovs).iter() {
-        fov.0 = field_of_view_set(pos.0, store.0.get("fov").unwrap_or(16), &*map).into_iter().collect()
+    for (id, (pos, mut fov)) in (&positions, &mut fovs).iter().with_id() {
+        let sight = (&sights).get(id).unwrap_or(&HasSight(8));
+        fov.0 = field_of_view_set(pos.0, sight.0 as i32, &*map).into_iter().collect()
     }
 }
-
 
 pub fn update_player_vision(mut map: UniqueViewMut<Map>,
                             is_player: View<IsPlayer>,
@@ -122,7 +105,6 @@ pub fn update_player_vision(mut map: UniqueViewMut<Map>,
     }
 }
 
-
 pub fn interpret_player_input_as_bump_intent(keyboard: UniqueView<KeyboardSnapshot>,
                                              is_player: View<IsPlayer>,
                                              mut positions: ViewMut<HasPosition>,
@@ -133,19 +115,20 @@ pub fn interpret_player_input_as_bump_intent(keyboard: UniqueView<KeyboardSnapsh
         let pos = has_pos.get_mut();
 
         let mut new_pos = Point::from(*pos);
-        if keyboard.is_pressed(VirtualKeyCode::Up) { new_pos.y -= 1; }
-        if keyboard.is_pressed(VirtualKeyCode::Down) { new_pos.y += 1; }
-        if keyboard.is_pressed(VirtualKeyCode::Left) { new_pos.x -= 1; }
-        if keyboard.is_pressed(VirtualKeyCode::Right) { new_pos.x += 1; }
+        if keyboard.is_pressed(VirtualKeyCode::W) { new_pos.y -= 1; }
+        if keyboard.is_pressed(VirtualKeyCode::D) { new_pos.x += 1; }
+        if keyboard.is_pressed(VirtualKeyCode::A) { new_pos.x -= 1; }
+        if keyboard.is_pressed(VirtualKeyCode::X)
+            || keyboard.is_pressed(VirtualKeyCode::S) { new_pos.y += 1; }
+        if keyboard.is_pressed(VirtualKeyCode::Q) { new_pos.x -= 1; new_pos.y -= 1; }
+        if keyboard.is_pressed(VirtualKeyCode::E) { new_pos.x += 1; new_pos.y -= 1; }
+        if keyboard.is_pressed(VirtualKeyCode::Z) { new_pos.x -= 1; new_pos.y += 1; }
+        if keyboard.is_pressed(VirtualKeyCode::C) { new_pos.x += 1; new_pos.y += 1; }
 
         if *pos != new_pos {
             bump_intents.push_back(BumpIntent { id: time.0, bumper: id, pos: new_pos });
         }
     }
-}
-
-pub fn update_time(mut time: UniqueViewMut<Time>,) {
-    time.0 += 1;
 }
 
 pub fn update_player_position(is_player: View<IsPlayer>,
@@ -157,52 +140,56 @@ pub fn update_player_position(is_player: View<IsPlayer>,
     }
 }
 
-pub fn clear_game_layers(ctx: &mut BTerm) {
-    for i in 0..=2 {
-        ctx.set_active_console(i);
-        ctx.cls();
-    }
-}
+pub fn render_player_field_of_view(mut batch: UniqueViewMut<Batch>,
+                                   mut map: UniqueViewMut<Map>,
+                                   has_fov: View<HasFieldOfView>,
+                                   is_player: View<IsPlayer>,) {
 
-pub fn clear_ui_layer(ctx: &mut BTerm) {
-    ctx.set_active_console(UI_CONSOLE_LAYER);
-    ctx.cls();
-}
+    if let Some((fov, _)) = (&has_fov, &is_player).iter().take(1).next() {
+        batch.0.target(MAP_CONSOLE_LAYER);
+        for pt in &fov.0 {
+            if let Some(tile_index) = map.get_tile_index_from_point(*pt) {
+                let glyph = match map.tiles[tile_index] {
+                    MapTile::Obscured => '#',
+                    MapTile::Corridor | MapTile::Floor(_) => '.',
+                    MapTile::Door => '+',
+                    _ => ' '
+                };
 
-pub fn render_map(ctx: &mut BTerm,
-                  map: UniqueView<Map>,
-                  store: UniqueView<Store>,
-                  player_position: UniqueView<PlayerPosition>,
-                  time: UniqueView<Time>) {
-
-    let view = store.0.get::<RenderView>("view")
-        .unwrap_or(RenderView::Game);
-
-    ctx.set_active_console(MAP_CONSOLE_LAYER);
-    map.render(ctx, &view, &store, player_position.0, time.0);
-}
-
-
-pub fn render_characters(ctx: &mut BTerm,
-                         map: UniqueView<Map>,
-                         character: View<IsCharacter>,
-                         positions: View<HasPosition>,
-                         glyphs: View<HasGlyph>,
-                         invisible: View<IsInvisible>,) {
-
-    ctx.set_active_console(MAP_CONSOLE_LAYER);
-    for (_, has_pos, has_glyph, _) in (&character, &positions, &glyphs, !&invisible).iter() {
-        let glyph = has_glyph.0;
-        let pos = has_pos.0;
-        let index = map.point2d_to_index(pos);
-        if map.is_tile_revealed(index) && map.is_tile_visible(index) {
-            ctx.print_color(pos.x, pos.y, RGB::from(glyph.fg), RGB::from(glyph.bg), glyph.ch);
+                batch.0.set(*pt, ColorPair::new(RGB::named(WHITE), RGB::named(BLACK)), glyph as u16);
+            }
         }
     }
 }
 
+pub fn render_player_visible_characters(mut batch: UniqueViewMut<Batch>,
+                                        is_player: View<IsPlayer>,
+                                        has_fov: View<HasFieldOfView>,
+                                        character: View<IsCharacter>,
+                                        positions: View<HasPosition>,
+                                        glyphs: View<HasGlyph>,
+                                        invisible: View<IsInvisible>,) {
+
+    if let Some((fov, _)) = (&has_fov, &is_player).iter().take(1).next() {
+        batch.0.target(MAP_CONSOLE_LAYER);
+        for (_, has_pos, has_glyph, _) in (&character, &positions, &glyphs, !&invisible).iter() {
+            let glyph = has_glyph.0;
+            let pos = has_pos.0;
+            if fov.0.contains(&pos) {
+                batch.0.set(pos, ColorPair::new(glyph.fg, glyph.bg), glyph.ch as u16);
+            }
+        }
+    }
+}
 
 pub fn clean_dirty(mut dirty: UniqueViewMut<IsDirty>) {
     dirty.0 = false;
 }
 
+pub fn submit_draw_batching(ctx: &mut BTerm,
+                            mut batch: UniqueViewMut<Batch>) {
+    use bracket_lib::prelude::render_draw_buffer;
+
+    batch.0.submit(0).ok();
+    render_draw_buffer(ctx).ok();
+}
