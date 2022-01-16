@@ -25,11 +25,17 @@ use crate::tiles::{MapTile, TileIndex};
 
 pub struct IsCharacter;
 
-pub fn on_input_keyboard_generate_level(mut storages: AllStoragesViewMut,) {
+pub fn on_command_generate_level(mut storages: AllStoragesViewMut,) {
+    use GameCommand::*;
+    use FlowCommand::*;
 
-    let size = { *storages.borrow::<UniqueView<WindowSize>>().expect("WindowSize") };
+    let front_is_generate_level = {
+        storages.borrow::<UniqueView<VecDeque<GameCommand>>>().unwrap().front() == Some(&Flow(GenerateLevel))
+    };
 
-    if storages.borrow::<UniqueView<KeyboardSnapshot>>().expect("KeyboardSnapshot").is_pressed(VirtualKeyCode::F4) {
+    if front_is_generate_level {
+        let size = { *storages.borrow::<UniqueView<WindowSize>>().expect("WindowSize") };
+
         storages.clear();
 
         {
@@ -69,6 +75,7 @@ pub fn on_input_keyboard_generate_level(mut storages: AllStoragesViewMut,) {
         }
 
         { storages.borrow::<UniqueViewMut<IsDirty>>().expect("IsDirty").0 = true; }
+        { storages.borrow::<UniqueViewMut<VecDeque<GameCommand>>>().expect("VecDeque<GameCommand>").pop_front(); }
     }
 }
 
@@ -77,6 +84,13 @@ pub fn make_input_snapshots(mut keyboard: UniqueViewMut<KeyboardSnapshot>,
     use std::borrow::Borrow;
     keyboard.update(INPUT.lock().borrow());
     mouse.update(INPUT.lock().borrow());
+}
+
+pub fn on_input_keyboard_generate_level(keyboard: UniqueView<KeyboardSnapshot>,
+                                        mut commands: UniqueViewMut<VecDeque<GameCommand>>,) {
+    if keyboard.is_pressed(VirtualKeyCode::F4) {
+        commands.push_back(GameCommand::Flow(FlowCommand::GenerateLevel));
+    }
 }
 
 pub fn on_input_keyboard_exit(keyboard: UniqueView<KeyboardSnapshot>,

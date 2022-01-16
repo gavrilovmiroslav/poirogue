@@ -190,17 +190,21 @@ impl Game {
         game.world.add_unique(PlayerPosition(Point::new(0, 0))).unwrap();
         game.world.add_unique(NotificationLog::new(args.log_height, args.log_expiry)).unwrap();
 
-        game.world.add_unique(ResolvedIntents::default());
-        game.world.add_unique(VecDeque::<BumpIntent>::new());
-        game.world.add_unique(VecDeque::<UnlockIntent>::new());
-        game.world.add_unique(VecDeque::<CollectIntent>::new());
-        game.world.add_unique(VecDeque::<InvestigateIntent>::new());
-        game.world.add_unique(VecDeque::<MoveDirective>::new());
-        game.world.add_unique(VecDeque::<UnlockDirective>::new());
+        game.world.add_unique(ResolvedIntents::default()).unwrap();
+        game.world.add_unique(VecDeque::<BumpIntent>::new()).unwrap();
+        game.world.add_unique(VecDeque::<UnlockIntent>::new()).unwrap();
+        game.world.add_unique(VecDeque::<CollectIntent>::new()).unwrap();
+        game.world.add_unique(VecDeque::<InvestigateIntent>::new()).unwrap();
+        game.world.add_unique(VecDeque::<MoveDirective>::new()).unwrap();
+        game.world.add_unique(VecDeque::<UnlockDirective>::new()).unwrap();
 
         Workload::builder("input handlers")
             .with_system(&core_systems::on_input_keyboard_exit)
             .with_system(&core_systems::on_input_keyboard_generate_level)
+            .add_to_world(&game.world).unwrap();
+
+        Workload::builder("game command interpretations")
+            .with_system(&core_systems::on_command_generate_level)
             .add_to_world(&game.world).unwrap();
 
         Workload::builder("realtime updates")
@@ -260,6 +264,26 @@ impl GameState for Game {
         // meta
         self.world.run(&core_systems::make_input_snapshots).unwrap();
         self.world.run_workload("input handlers").unwrap();
+
+        { // interpret game commands
+            let mut more_commands = true;
+
+            while more_commands {
+                let command_count = self.world.borrow::<UniqueView<VecDeque<GameCommand>>>().unwrap().len();
+                self.world.run_workload("game command interpretations").unwrap();
+                let new_command_count = self.world.borrow::<UniqueView<VecDeque<GameCommand>>>().unwrap().len();
+
+                if command_count == new_command_count && command_count > 0 {
+                    println!("Warning: removing uninterpreted game command {:?}",
+                             *self.world.borrow::<UniqueView<VecDeque<GameCommand>>>().unwrap().front().unwrap());
+
+                    self.world.borrow::<UniqueViewMut<VecDeque<GameCommand>>>().unwrap().pop_front();
+                    more_commands = false;
+                } else if new_command_count == 0 {
+                    more_commands = false;
+                }
+            }
+        }
 
         self.world.run(&core_systems::update_time).unwrap();
         self.world.run_workload("realtime updates").unwrap();
