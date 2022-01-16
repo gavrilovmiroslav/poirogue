@@ -152,7 +152,7 @@ impl Map {
                 }
             }
         } else {
-            let noise = store.get::<Vec<f32>>("noise_map").unwrap();
+            let noise = store.0.get::<Vec<f32>>("noise_map").unwrap();
             let (xp, yp) = (player_position.x, player_position.y);
 
             for y in 0..self.height {

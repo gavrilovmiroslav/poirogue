@@ -1,6 +1,6 @@
 use structopt::*;
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, StructOpt, Clone)]
 #[structopt(name = "Poirogue")]
 pub struct Opt {
     #[structopt(short = "seed", long, default_value = "0")]

@@ -23,7 +23,7 @@ use simple_ringbuf::RingBuffer;
 use crate::map::Map;
 use crate::readonly_archive_cave::ReadonlyArchiveCave;
 use crate::commands::{ActionCommand, FlowCommand, GameCommand, GameFlow, HackCommand};
-use crate::input::{InputSnapshotState, InputSnapshot, KeyboardSnapshot, InputSnapshots};
+use crate::input::{InputSnapshotState, InputSnapshot, KeyboardSnapshot, InputSnapshots, MouseSnapshot};
 use crate::map_gen::run_map_gen;
 use crate::murder_gen::generate_murder;
 use crate::{core_systems, rand_gen};
@@ -40,90 +40,56 @@ use crate::tiles::{MapTile, MapTileRep, TileIndex};
 use crate::render_view::{RenderViewDefinition};
 use crate::render_view::*;
 use crate::game_systems;
-use crate::game_systems::{BumpIntent, CollectIntent, Handle, InvestigateIntent, IsDoor, IsItem, IsLocked, Item, MoveDirective, NotificationLog, ObjectUsedUp, on_bump_interpret_as_investigate_intent, UnlockDirective, UnlockIntent};
+use crate::game_systems::{BumpIntent, CollectIntent, Handle, InvestigateIntent, IsDoor, IsItem, IsLocked, Item, MoveDirective, NotificationLog, on_bump_interpret_as_investigate_intent, UnlockDirective, UnlockIntent};
 use crate::maybe::Maybe;
 
-pub type Store = PickleDb;
+#[derive(Copy, Clone)]
+pub struct FlagDebug(pub bool);
+
+#[derive(Copy, Clone)]
+pub struct FlagExit(pub bool);
+
+pub struct Store(pub(crate) PickleDb);
+pub struct MemoryUsageLog(pub(crate) PickleDb);
+
+#[derive(Copy, Clone)]
+pub struct WindowSize(pub (i32, i32));
+
+pub struct Binary(Box<dyn Cave>);
 
 pub struct Game {
     pub debug: bool,
-    pub dirty: bool,
-    pub size: (i32, i32),
-    pub map: Map,
-    pub flow: GameFlow,
-    pub commands: VecDeque<GameCommand>,
-    pub input: InputSnapshots,
-    pub data: Box<dyn Cave>,
-    pub store: Store,
     pub world: World,
-    pub usage_log: Store,
+    pub args: Opt,
 }
 
-impl InternalJsonStorage for Game {
-    fn get_json<T>(&self, name: &str) -> Option<T>
-        where for <'a> T: de::Deserialize<'a> {
-        if let Ok(binary_data) = self.data.get(name) {
-            if let Ok(string_data) = str::from_utf8(&binary_data) {
-                let json_as_struct = serde_json::from_str::<T>(string_data).unwrap();
-                return Some(json_as_struct)
-            }
-        }
-
-        return None;
-    }
-
-    fn set_json<T>(&self, name: &str, value: &T)
-        where T: ?Sized + Serialize {
-
-        if let Ok(json) = serde_json::to_string_pretty(value) {
-            self.data.set(name, &json.as_bytes().to_vec()).unwrap();
-        }
-    }
-}
 
 impl Game {
-    pub fn new(w: i32, h: i32, args: &Opt) -> Game {
-        let data: Box<dyn Cave> = if args.release_mode {
-            Box::new(ReadonlyArchiveCave::open(format!("{}.bin", args.data_directory)))
-        } else {
-            Box::new(FileCave::new(Path::new(args.data_directory.as_str())).unwrap())
-        };
-
-        use PickleDbDumpPolicy::*;
-
+    pub fn new(args: &Opt) -> Game {
         Game {
             debug: args.keep_memory_log,
-            dirty: true,
-            size: (w, h),
-            map: Map::new(w, h),
-            flow: GameFlow::Player,
-            commands: VecDeque::default(),
-            input: InputSnapshots::default(),
-            store: PickleDb::new("", PickleDbDumpPolicy::NeverDump, SerializationMethod::Bin),
             world: World::new(),
-            usage_log: PickleDb::new(
-                if args.keep_memory_log { "memory_usage_log.json" } else { "" },
-                if args.keep_memory_log { DumpUponRequest } else { NeverDump },
-                SerializationMethod::Json),
-            data,
+            args: args.clone(),
         }
     }
 
     pub fn setup_store(&mut self) {
+        let mut store = { self.world.borrow::<UniqueViewMut<Store>>().unwrap() };
+        let mut map = { self.world.borrow::<UniqueViewMut<Map>>().unwrap() };
         { /* FOV */
             let fov = 16;
-            self.store.set("fov", &fov)
+            store.0.set("fov", &fov)
                 .expect("Failed storing FOV");
         }
 
         { /* NOISE MAP */
-            let size = (self.map.width * self.map.height) as usize;
+            let size = (map.width * map.height) as usize;
             let mut noise = Vec::with_capacity(size);
             for _ in 0..size {
                 noise.push(get_random_between(0.0, 1.0));
             }
 
-            self.store.set("noise_map", &noise)
+            store.0.set("noise_map", &noise)
                 .expect("Failed storing noise map");
         }
     }
@@ -138,88 +104,15 @@ impl Game {
 
         let filename = view_to_file(&view);
         let rep = {
-            if let Some(json) = self.get_json::<MapTileRep>(filename) {
+            if let Some(json) = self.world.borrow::<UniqueView<Binary>>().unwrap().0.get_json::<MapTileRep>(filename) {
                 json
             } else {
-                self.set_json(filename, &MapTileRep::default());
+                self.world.borrow::<UniqueViewMut<Binary>>().unwrap().0.set_json(filename, &MapTileRep::default());
                 MapTileRep::default()
             }
         };
 
         cache_render_view_rep(view, rep);
-    }
-
-    fn create_new_level(&mut self) {
-        self.world.clear();
-
-        let (map, storage) = run_map_gen(self.size.0, self.size.1 - 3, &mut self.store);
-        self.map = map;
-
-        let all_doors = self.map.get_all_doors().as_slice().to_vec();
-        let some_doors: HashSet<TileIndex, RandomState> = HashSet::from_iter(get_random_sub(self.map.get_all_doors().as_slice(), 0.5));
-
-        for door in all_doors {
-            let pos = self.map.index_to_point2d(door);
-            let mut door_entity = self.world.add_entity((
-                IsDoor(true),
-                HasPosition(pos),
-                HasGlyph(Glyph::new('+')),
-            ));
-
-            if some_doors.contains(&door) {
-                let pt = get_random_from(&storage.rects).center();
-                let key = format!("Key for {}", door);
-                let key_entity = self.world.add_entity((
-                    IsItem{ item: key, is_collected: false },
-                    HasPosition(pt),
-                    HasGlyph(Glyph::new('(')),
-                ));
-
-                self.world.add_component(door_entity, (IsLocked{ key: key_entity },));
-                if pt.x % 2 == 0 {
-                    self.world.add_component(door_entity, (ObjectUsedUp,));
-                }
-            }
-        }
-
-        let starting_pos = get_random_from(&storage.rects).center();
-
-        self.world.add_entity((
-            IsPlayer,
-            IsCharacter,
-            HasPosition(starting_pos),
-            HasGlyph(Glyph::new('@')),
-            HasFieldOfView(Vec::new()),
-        ));
-
-        self.world.borrow::<UniqueViewMut<IsDirty>>().unwrap().0 = true;
-    }
-
-    fn resolve_command_queue(&mut self, ctx: &mut BTerm) {
-        while let Some(comm) = self.commands.pop_front() {
-            match comm {
-                GameCommand::Flow(FlowCommand::GenerateLevel) => {
-                    self.create_new_level()
-                },
-
-                GameCommand::Flow(FlowCommand::ReloadViewConfigs) => {
-                    self.register_render_view(RenderView::Game);
-                    self.register_render_view(RenderView::Debug);
-                },
-
-                GameCommand::Flow(FlowCommand::Exit) => ctx.quit(),
-
-                GameCommand::Flow(FlowCommand::CycleViews) => {
-                    let view = self.store.get::<RenderView>("view").unwrap_or(RenderView::Game);
-                    self.store.set("view", &view.toggle()).unwrap();
-                    self.world.borrow::<UniqueViewMut<IsDirty>>().unwrap().0 = true;
-                },
-
-                _ => {}
-            }
-
-            self.dirty = true;
-        }
     }
 
     pub fn run(args: Opt) {
@@ -252,19 +145,53 @@ impl Game {
 
             .build().expect("Couldn't build the terminal window");
 
-        let mut game = Game::new(width, height, &args);
-        game.setup_store();
+        let mut game = Game::new(&args);
+
+        game.world.add_unique(FlagDebug(args.keep_memory_log)).expect("Added FlagDebug");
+        game.world.add_unique(FlagExit(false)).expect("Added FlagExit");
+        game.world.add_unique(WindowSize((width, height))).expect("Added WindowSize");
+        game.world.add_unique(Map::new(width, height)).expect("Added Map");
+        game.world.add_unique(GameFlow::Player).expect("Added GameFlow");
+
+        {
+            let mut commands = VecDeque::<GameCommand>::new();
+            commands.push_back(GameCommand::Flow(FlowCommand::ReloadViewConfigs));
+            commands.push_back(GameCommand::Flow(FlowCommand::GenerateLevel));
+            game.world.add_unique(commands).expect("Added VecDeque<GameCommands>");
+        }
+
+        game.world.add_unique(KeyboardSnapshot::default()).expect("Added KeyboardSnapshot");
+        game.world.add_unique(MouseSnapshot::default()).expect("Added KeyboardSnapshot");
+
+        {
+            game.world.add_unique(Store(PickleDb::new("", PickleDbDumpPolicy::NeverDump, SerializationMethod::Bin)))
+                .expect("Added Store");
+
+            game.setup_store();
+        }
+
+        {
+            use pickledb::PickleDbDumpPolicy::*;
+
+            game.world.add_unique(MemoryUsageLog(PickleDb::new(
+                if args.keep_memory_log { "memory_usage_log.json" } else { "" },
+                if args.keep_memory_log { DumpUponRequest } else { NeverDump },
+                SerializationMethod::Json))).expect("Added MemoryUsageLog");
+        }
+
+        game.world.add_unique(Binary(if args.release_mode {
+            Box::new(ReadonlyArchiveCave::open(format!("{}.bin", args.data_directory)))
+        } else {
+            Box::new(FileCave::new(Path::new(args.data_directory.as_str())).unwrap())
+        })).expect("Added Binary");
 
         game.world.add_unique(Time(0u64)).unwrap();
         game.world.add_unique(IsDirty(true)).unwrap();
         game.world.add_unique(PlayerPosition(Point::new(0, 0))).unwrap();
         game.world.add_unique(NotificationLog::new(args.log_height, args.log_expiry)).unwrap();
 
-        game.commands.push_back(GameCommand::Flow(FlowCommand::ReloadViewConfigs));
-        game.commands.push_back(GameCommand::Flow(FlowCommand::GenerateLevel));
-
-        if game.debug {
-            create_memory_usage_log(&mut game.usage_log);
+        if args.keep_memory_log {
+            create_memory_usage_log(&mut game.world.borrow::<UniqueViewMut<MemoryUsageLog>>().unwrap());
         }
 
         main_loop(term, game).unwrap();
@@ -273,26 +200,26 @@ impl Game {
 
 impl GameState for Game {
     fn tick(&mut self, ctx: &mut BTerm) {
-        self.resolve_command_queue(ctx);
-        self.input.make_new_snapshots(INPUT.lock().borrow());
+        self.world.run(&core_systems::make_input_snapshots).unwrap();
 
         // meta
-        self.world.run_with_data(&core_systems::accept_meta_commands, (&self.input, &mut self.commands)).unwrap();
+        self.world.run(&core_systems::on_input_keyboard_exit).unwrap();
+        self.world.run(&core_systems::on_input_keyboard_generate_level).unwrap();
 
         self.world.run(&core_systems::update_time).unwrap();
         self.world.run(&core_systems::update_player_position).unwrap();
-        self.world.run_with_data(&core_systems::update_dirty_fovs, (&self.store, &self.map)).unwrap();
+        self.world.run(&core_systems::update_dirty_fovs).unwrap();
         self.world.run(&game_systems::update_notification_log_expiry).unwrap();
-        self.world.run_with_data(&core_systems::update_player_vision, &mut self.map).unwrap();
+        self.world.run(&core_systems::update_player_vision).unwrap();
 
         // rendering game
         ctx.set_active_console(0);
-        self.world.run_with_data(&core_systems::render_map, (&mut self.map, &mut self.store, ctx)).unwrap();
-        self.world.run_with_data(&game_systems::render_doors, (&self.map, ctx)).unwrap();
-        self.world.run_with_data(&game_systems::render_locked_doors, (&self.map, ctx)).unwrap();
-        self.world.run_with_data(&game_systems::render_known_locked_doors, (&self.map, ctx)).unwrap();
-        self.world.run_with_data(&game_systems::render_items, (&self.map, ctx)).unwrap();
-        self.world.run_with_data(&core_systems::render_characters, (&self.map, ctx)).unwrap();
+        self.world.run_with_data(&core_systems::render_map, ctx).unwrap();
+        self.world.run_with_data(&game_systems::render_doors, ctx).unwrap();
+        self.world.run_with_data(&game_systems::render_locked_doors, ctx).unwrap();
+        self.world.run_with_data(&game_systems::render_known_locked_doors, ctx).unwrap();
+        self.world.run_with_data(&game_systems::render_items, ctx).unwrap();
+        self.world.run_with_data(&core_systems::render_characters, ctx).unwrap();
 
         // rendering gui
         ctx.set_active_console(2);
@@ -304,7 +231,7 @@ impl GameState for Game {
         self.world.run(&core_systems::clean_dirty).unwrap();
 
         // input
-        self.world.run_with_data(&core_systems::interpret_player_input_as_bump_intent, &self.input).unwrap();
+        self.world.run(&core_systems::interpret_player_input_as_bump_intent).unwrap();
 
         self.world.run(&game_systems::on_bump_interpret_as_collect_item_intent).unwrap();
         self.world.run(&game_systems::on_collect_if_possible).unwrap();
@@ -318,20 +245,24 @@ impl GameState for Game {
         self.world.run(&game_systems::on_investigate_lock).unwrap();
         self.world.run(&game_systems::on_investigate_default).unwrap();
 
-        self.world.run_with_data(&game_systems::on_bump_open_doors, &mut self.map).unwrap();
-        self.world.run_with_data(&game_systems::on_bump_default, &self.map).unwrap();
+        self.world.run(&game_systems::on_bump_open_doors).unwrap();
+        self.world.run(&game_systems::on_bump_default).unwrap();
 
         // resolve directives
         self.world.run(&game_systems::resolve_unlock_directive).unwrap();
-        self.world.run_with_data(&game_systems::resolve_move_directives, &self.map).unwrap();
+        self.world.run(&game_systems::resolve_move_directives).unwrap();
 
         self.world.run(&game_systems::delete_handled_intents).unwrap();
 
         if self.debug {
             let time = self.world.borrow::<UniqueView<Time>>().unwrap().0;
             if time % 100 == 0 {
-                log_overall_memory_usage(time, &self.world, &mut self.usage_log);
+                log_overall_memory_usage(time, &self.world, &mut self.world.borrow::<UniqueViewMut<MemoryUsageLog>>().unwrap());
             }
+        }
+
+        if self.world.borrow::<UniqueView<FlagExit>>().unwrap().0 {
+            ctx.quit();
         }
     }
 }

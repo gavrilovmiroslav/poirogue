@@ -12,11 +12,10 @@ use crate::map::Map;
 
 pub struct MoveDirective(pub EntityId, pub Point);
 
-pub fn resolve_move_directives(map: &Map,
+pub fn resolve_move_directives(map: UniqueView<Map>,
                                mut move_dirs: ViewMut<MoveDirective>,
                                mut positions: ViewMut<HasPosition>,
-                               mut dirty: UniqueViewMut<IsDirty>,
-                               mut entities: EntitiesViewMut) {
+                               mut dirty: UniqueViewMut<IsDirty>,) {
 
     let mut to_be_removed = Vec::new();
 

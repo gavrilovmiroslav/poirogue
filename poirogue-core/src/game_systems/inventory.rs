@@ -24,7 +24,8 @@ pub struct CarriesItem {
     pub item: EntityId,
 }
 
-pub fn render_items((map, ctx): (&Map, &mut BTerm),
+pub fn render_items(ctx: &mut BTerm,
+                    map: UniqueView<Map>,
                     has_position: View<HasPosition>,
                     has_glyph: View<HasGlyph>,
                     is_invisible: View<IsInvisible>,

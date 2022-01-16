@@ -15,10 +15,10 @@ pub struct IsDoor(pub bool);
 pub struct IsLocked {
     pub key: EntityId,
 }
-pub struct ObjectUsedUp;
 pub struct IsKnown;
 
-pub fn render_doors((map, ctx): (&Map, &mut BTerm),
+pub fn render_doors(ctx: &mut BTerm,
+                    map: UniqueView<Map>,
                     doors: View<IsDoor>,
                     has_position: View<HasPosition>,
                     has_glyph: View<HasGlyph>,
@@ -39,7 +39,8 @@ pub fn render_doors((map, ctx): (&Map, &mut BTerm),
 }
 
 
-pub fn render_locked_doors((map, ctx): (&Map, &mut BTerm),
+pub fn render_locked_doors(ctx: &mut BTerm,
+                           map: UniqueView<Map>,
                            doors: View<IsDoor>,
                            has_position: View<HasPosition>,
                            has_glyph: View<HasGlyph>,
@@ -60,15 +61,16 @@ pub fn render_locked_doors((map, ctx): (&Map, &mut BTerm),
 }
 
 
-pub fn render_known_locked_doors((map, ctx): (&Map, &mut BTerm),
-                           doors: View<IsDoor>,
-                           has_position: View<HasPosition>,
-                           has_glyph: View<HasGlyph>,
-                           is_locked: View<IsLocked>,
-                           is_player: View<IsPlayer>,
-                           is_known: View<IsKnown>,
-                           carries: View<CarriesItem>,
-                           is_dirty: UniqueView<IsDirty>, ) {
+pub fn render_known_locked_doors(ctx: &mut BTerm,
+                                 map: UniqueView<Map>,
+                                 doors: View<IsDoor>,
+                                 has_position: View<HasPosition>,
+                                 has_glyph: View<HasGlyph>,
+                                 is_locked: View<IsLocked>,
+                                 is_player: View<IsPlayer>,
+                                 is_known: View<IsKnown>,
+                                 carries: View<CarriesItem>,
+                                 is_dirty: UniqueView<IsDirty>, ) {
 
     if is_dirty.0 {
         for (_, pos, glyph, locked, _) in (&doors, &has_position, &has_glyph, &is_locked, &is_known).iter() {
@@ -111,7 +113,7 @@ pub fn on_bump_interpret_as_door_unlock_intent(doors: View<IsDoor>,
 }
 
 
-pub fn on_bump_open_doors(map: &mut Map,
+pub fn on_bump_open_doors(mut map: UniqueViewMut<Map>,
                           has_position: View<HasPosition>,
                           mut doors: ViewMut<IsDoor>,
                           mut locked: ViewMut<IsLocked>,
@@ -130,7 +132,8 @@ pub fn on_bump_open_doors(map: &mut Map,
             door.0 = false;
             glyph.0.ch = '_';
             glyph.0.fg = named_color(DARK_GRAY);
-            map.set_at_tile_index(map.point2d_to_index(pos.0), MapTile::Corridor);
+            let tile_index = map.point2d_to_index(pos.0);
+            map.set_at_tile_index(tile_index, MapTile::Corridor);
 
             dirty.0 = true;
             bump.handled = true;
