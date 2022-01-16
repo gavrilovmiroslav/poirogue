@@ -14,9 +14,10 @@ use crate::game::{FlagExit, Store, WindowSize};
 use crate::input::{InputSnapshot, InputSnapshots, KeyboardSnapshot, MouseSnapshot};
 use crate::map::Map;
 use crate::game_systems::directives::MoveDirective;
-use crate::game_systems::{CollectIntent, Handle, InvestigateIntent, IsDoor, IsItem, IsLocked};
+use crate::game_systems::{CollectIntent, InvestigateIntent, IsDoor, IsItem, IsLocked};
 use crate::game_systems::intents::{BumpIntent, UnlockIntent};
 use crate::glyph::Glyph;
+use crate::{MAP_CONSOLE_LAYER, UI_CONSOLE_LAYER};
 use crate::map_gen::run_map_gen;
 use crate::rand_gen::{get_random_from, get_random_sub};
 use crate::render_view::RenderView;
@@ -86,30 +87,24 @@ pub fn on_input_keyboard_exit(keyboard: UniqueView<KeyboardSnapshot>,
     }
 }
 
-pub fn update_dirty_fovs(store: UniqueView<Store>,
-                         map: UniqueView<Map>,
-                         positions: View<HasPosition>,
-                         mut fovs: ViewMut<HasFieldOfView>,
-                         dirty: UniqueView<IsDirty>) {
+pub fn update_fields_of_view(store: UniqueView<Store>,
+                             map: UniqueView<Map>,
+                             positions: View<HasPosition>,
+                             mut fovs: ViewMut<HasFieldOfView>,) {
 
-    if dirty.0 {
-        let m: &Map = &map;
-        for (pos, mut fov) in (&positions, &mut fovs).iter() {
-            fov.0 = field_of_view_set(pos.0, store.0.get("fov").unwrap_or(16), m).into_iter().collect()
-        }
+    for (pos, mut fov) in (&positions, &mut fovs).iter() {
+        fov.0 = field_of_view_set(pos.0, store.0.get("fov").unwrap_or(16), &*map).into_iter().collect()
     }
 }
 
 
 pub fn update_player_vision(mut map: UniqueViewMut<Map>,
                             is_player: View<IsPlayer>,
-                            fovs: View<HasFieldOfView>,
-                            dirty: UniqueView<IsDirty>) {
-    if dirty.0 {
-        for (_, fov) in (&is_player, &fovs).iter() {
-            map.hide();
-            map.show(&fov.0);
-        }
+                            fovs: View<HasFieldOfView>, ) {
+
+    for (_, fov) in (&is_player, &fovs).iter() {
+        map.hide();
+        map.show(&fov.0);
     }
 }
 
@@ -117,8 +112,8 @@ pub fn update_player_vision(mut map: UniqueViewMut<Map>,
 pub fn interpret_player_input_as_bump_intent(keyboard: UniqueView<KeyboardSnapshot>,
                                              is_player: View<IsPlayer>,
                                              mut positions: ViewMut<HasPosition>,
-                                             mut bump_intents: ViewMut<Handle<BumpIntent>>,
-                                             mut entities: EntitiesViewMut,) {
+                                             mut bump_intents: UniqueViewMut<VecDeque<BumpIntent>>,
+                                             mut time: UniqueView<Time>, ) {
 
     for (id, (_, mut has_pos)) in (&is_player, &mut positions).iter().with_id() {
         let pos = has_pos.get_mut();
@@ -130,7 +125,7 @@ pub fn interpret_player_input_as_bump_intent(keyboard: UniqueView<KeyboardSnapsh
         if keyboard.is_pressed(VirtualKeyCode::Right) { new_pos.x += 1; }
 
         if *pos != new_pos {
-            entities.add_entity((&mut bump_intents, ), (Handle::new(BumpIntent { bumper: id, pos: new_pos }),));
+            bump_intents.push_back(BumpIntent { id: time.0, bumper: id, pos: new_pos });
         }
     }
 }
@@ -141,31 +136,36 @@ pub fn update_time(mut time: UniqueViewMut<Time>,) {
 
 pub fn update_player_position(is_player: View<IsPlayer>,
                               positions: View<HasPosition>,
-                              dirty: UniqueView<IsDirty>,
                               mut player_position: UniqueViewMut<PlayerPosition>,) {
 
-    if dirty.0 {
-        for (_, pos) in (&is_player, &positions).iter() {
-            player_position.0 = pos.0;
-        }
+    for (_, pos) in (&is_player, &positions).iter() {
+        player_position.0 = pos.0;
     }
 }
 
+pub fn clear_game_layers(ctx: &mut BTerm) {
+    for i in 0..=2 {
+        ctx.set_active_console(i);
+        ctx.cls();
+    }
+}
+
+pub fn clear_ui_layer(ctx: &mut BTerm) {
+    ctx.set_active_console(UI_CONSOLE_LAYER);
+    ctx.cls();
+}
 
 pub fn render_map(ctx: &mut BTerm,
                   map: UniqueView<Map>,
                   store: UniqueView<Store>,
-                  dirty: UniqueView<IsDirty>,
                   player_position: UniqueView<PlayerPosition>,
                   time: UniqueView<Time>) {
 
-    if dirty.0 {
-        let view = store.0.get::<RenderView>("view")
-            .unwrap_or(RenderView::Game);
+    let view = store.0.get::<RenderView>("view")
+        .unwrap_or(RenderView::Game);
 
-        ctx.cls();
-        map.render(ctx, &view, &store, player_position.0, time.0);
-    }
+    ctx.set_active_console(MAP_CONSOLE_LAYER);
+    map.render(ctx, &view, &store, player_position.0, time.0);
 }
 
 
@@ -174,17 +174,15 @@ pub fn render_characters(ctx: &mut BTerm,
                          character: View<IsCharacter>,
                          positions: View<HasPosition>,
                          glyphs: View<HasGlyph>,
-                         invisible: View<IsInvisible>,
-                         dirty: UniqueView<IsDirty>,) {
+                         invisible: View<IsInvisible>,) {
 
-    if dirty.0 {
-        for (_, has_pos, has_glyph, _) in (&character, &positions, &glyphs, !&invisible).iter() {
-            let glyph = has_glyph.0;
-            let pos = has_pos.0;
-            let index = map.point2d_to_index(pos);
-            if map.is_tile_revealed(index) && map.is_tile_visible(index) {
-                ctx.print_color(pos.x, pos.y, RGB::from(glyph.fg), RGB::from(glyph.bg), glyph.ch);
-            }
+    ctx.set_active_console(MAP_CONSOLE_LAYER);
+    for (_, has_pos, has_glyph, _) in (&character, &positions, &glyphs, !&invisible).iter() {
+        let glyph = has_glyph.0;
+        let pos = has_pos.0;
+        let index = map.point2d_to_index(pos);
+        if map.is_tile_revealed(index) && map.is_tile_visible(index) {
+            ctx.print_color(pos.x, pos.y, RGB::from(glyph.fg), RGB::from(glyph.bg), glyph.ch);
         }
     }
 }

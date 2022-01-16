@@ -1,81 +1,43 @@
+use std::collections::{HashSet, VecDeque};
 use bracket_lib::prelude::Point;
 use crate::tiles::TileIndex;
-use shipyard::{AllStoragesViewMut, EntitiesViewMut, EntityId, IntoIter, IntoWithId, Not, SparseSet, Storage, View, ViewMut};
+use shipyard::{AllStoragesViewMut, EntitiesViewMut, EntityId, IntoIter, IntoWithId, Not, SparseSet, Storage, UniqueViewMut, View, ViewMut};
 
-pub struct Handle<T> {
-    pub intent: T,
-    pub handled: bool,
-    pub origin: Vec<EntityId>,
+
+pub fn delete_intents(mut storage: AllStoragesViewMut) {
+    storage.borrow::<UniqueViewMut<VecDeque<BumpIntent>>>().unwrap().clear();
+    storage.borrow::<UniqueViewMut<VecDeque<UnlockIntent>>>().unwrap().clear();
+    storage.borrow::<UniqueViewMut<VecDeque<CollectIntent>>>().unwrap().clear();
+    storage.borrow::<UniqueViewMut<VecDeque<InvestigateIntent>>>().unwrap().clear();
+    storage.borrow::<UniqueViewMut<ResolvedIntents>>().unwrap().0.clear();
 }
 
-impl<T> Handle<T> {
-    pub fn new(intent: T) -> Self {
-        Handle { intent, handled: false, origin: Vec::new() }
-    }
+#[derive(Default)]
+pub struct ResolvedIntents(pub HashSet<u64>);
 
-    pub fn spawn<N>(&self, self_id: EntityId, intent: N) -> Handle<N> {
-        let mut origin = self.origin.clone();
-        origin.push(self_id);
-        Handle { intent, handled: false, origin }
-    }
-}
-
-pub fn propagate_handled_intents<T: 'static + Send + Sync>(mut storage: &mut AllStoragesViewMut,) {
-    let mut deleted = Vec::new();
-    for (id, h) in (&storage.borrow::<View<Handle<T>>>().unwrap())
-        .iter().with_id().filter(|(_, h)| h.handled) {
-
-        deleted.push(id);
-        for prev in &h.origin {
-            deleted.push(*prev);
-        }
-    }
-
-    for id in deleted {
-        storage.delete_entity(id);
-    }
-}
-
-pub fn propagate_handled_and_delete_rest<T: 'static + Send + Sync>(mut storage: &mut AllStoragesViewMut) {
-    propagate_handled_intents::<T>(&mut storage);
-
-    let mut deleted = Vec::new();
-    for (id, _) in (&storage.borrow::<View<Handle<T>>>().unwrap()).iter().with_id() {
-        deleted.push(id);
-    }
-
-    for id in deleted {
-        let _ = &storage.borrow::<ViewMut<Handle<T>>>().unwrap().delete(id);
-        let _ = &storage.borrow::<ViewMut<Handle<T>>>().unwrap().remove(id);
-        let _ = &storage.borrow::<EntitiesViewMut>().unwrap().delete_unchecked(id);
-    }
-
-    storage.delete_any::<SparseSet<Handle<T>>>();
-}
-
-pub fn delete_handled_intents(mut storage: AllStoragesViewMut) {
-    propagate_handled_intents::<BumpIntent>(&mut storage);
-    propagate_handled_intents::<UnlockIntent>(&mut storage);
-    propagate_handled_intents::<CollectIntent>(&mut storage);
-    propagate_handled_intents::<InvestigateIntent>(&mut storage);
-}
-
-
+#[derive(Copy, Clone)]
 pub struct BumpIntent {
+    pub id: u64,
     pub bumper: EntityId,
     pub pos: Point,
 }
 
+#[derive(Copy, Clone)]
 pub struct UnlockIntent {
+    pub id: u64,
     pub entity: EntityId,
     pub target: EntityId,
 }
 
+#[derive(Copy, Clone)]
 pub struct CollectIntent {
+    pub id: u64,
     pub collector: EntityId,
     pub item: EntityId,
 }
 
+#[derive(Copy, Clone)]
 pub struct InvestigateIntent {
+    pub id: u64,
     pub pos: Point,
 }

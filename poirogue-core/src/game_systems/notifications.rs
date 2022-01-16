@@ -7,6 +7,8 @@ use shipyard::{UniqueView, UniqueViewMut};
 use simple_ringbuf::RingBuffer;
 use crate::colors::named_color;
 use crate::entity::IsDirty;
+use crate::game_systems::{BumpIntent, CollectIntent, InvestigateIntent, UnlockIntent};
+use crate::UI_CONSOLE_LAYER;
 
 pub struct NotificationLog {
     pub log: VecDeque<String>,
@@ -57,6 +59,8 @@ pub fn render_notification_log(mut ctx: &mut BTerm,
 
     if notif_log.log.is_empty() { return; }
 
+    ctx.set_active_console(UI_CONSOLE_LAYER);
+
     let height = ctx.get_char_size().1;
     let mut current_line = height - notif_log.cap - 1;
 
@@ -66,6 +70,7 @@ pub fn render_notification_log(mut ctx: &mut BTerm,
     }
 }
 
-pub fn render_fps(mut ctx: &mut BTerm,) {
+pub fn render_fps(mut ctx: &mut BTerm, ) {
+    ctx.set_active_console(UI_CONSOLE_LAYER);
     ctx.print_color(1, 1, named_color(WHITE), named_color(BLACK), format!("{} FPS", ctx.fps));
 }

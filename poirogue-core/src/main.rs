@@ -22,7 +22,10 @@ mod core_systems;
 mod json;
 mod game_systems;
 mod maybe;
-mod diagnostics;
+
+const MAP_CONSOLE_LAYER: usize = 0;
+const DRAWING_CONSOLE_LAYER: usize = 1;
+const UI_CONSOLE_LAYER: usize = 2;
 
 embedded_resource!(TILE_FONT, "../resources/classic_roguelike_white.png");
 embedded_resource!(IMAGE_FONT, "../resources/MRMOTEXTEX_rexpaintx2.png");

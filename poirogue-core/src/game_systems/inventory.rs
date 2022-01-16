@@ -1,5 +1,5 @@
 use std::borrow::BorrowMut;
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::ops::Index;
 use bracket_color::prelude::{BLACK, DARK_GRAY};
 use bracket_lib::prelude::{Point, Algorithm2D, BTerm};
@@ -8,8 +8,9 @@ use crate::colors::{ColorShifter, named_color};
 use crate::core_systems::IsCharacter;
 use crate::entity::{HasGlyph, HasPosition, IsDirty, IsInvisible};
 use crate::game::Store;
-use crate::game_systems::{BumpIntent, CollectIntent, Handle, MoveDirective, NotificationLog, propagate_handled_and_delete_rest, propagate_handled_intents};
+use crate::game_systems::{BumpIntent, CollectIntent, MoveDirective, NotificationLog, ResolvedIntents};
 use crate::map::Map;
+use crate::MAP_CONSOLE_LAYER;
 use crate::tiles::{MapTile, TileIndex};
 
 pub type Item = String;
@@ -29,38 +30,35 @@ pub fn render_items(ctx: &mut BTerm,
                     has_position: View<HasPosition>,
                     has_glyph: View<HasGlyph>,
                     is_invisible: View<IsInvisible>,
-                    is_item: View<IsItem>,
-                    is_dirty: UniqueView<IsDirty>, ) {
+                    is_item: View<IsItem>,) {
 
-    if is_dirty.0 {
-        for (_, pos, glyph, _) in (&is_item, &has_position, &has_glyph, !&is_invisible).iter()
-            .filter(|(i, _, _, _)| !i.is_collected) {
-            let tile = map.point2d_to_index(Point::from(pos.0));
-            let fg = if map.is_tile_visible(tile) { glyph.0.fg } else { named_color(DARK_GRAY).darken(0.5) };
+    ctx.set_active_console(MAP_CONSOLE_LAYER);
 
-            if map.is_tile_revealed(tile) {
-                ctx.print_color(pos.0.x, pos.0.y, fg, named_color(BLACK), glyph.0.ch);
-            }
+    for (_, pos, glyph, _) in (&is_item, &has_position, &has_glyph, !&is_invisible).iter()
+        .filter(|(i, _, _, _)| !i.is_collected) {
+        let tile = map.point2d_to_index(Point::from(pos.0));
+        let fg = if map.is_tile_visible(tile) { glyph.0.fg } else { named_color(DARK_GRAY).darken(0.5) };
+
+        if map.is_tile_revealed(tile) {
+            ctx.print_color(pos.0.x, pos.0.y, fg, named_color(BLACK), glyph.0.ch);
         }
     }
+
 }
 
 pub fn on_bump_interpret_as_collect_item_intent(items: View<IsItem>,
                                                 has_position: View<HasPosition>,
-                                                mut bump_intents: ViewMut<Handle<BumpIntent>>,
-                                                mut collect_intents: ViewMut<Handle<CollectIntent>>,
-                                                mut entities: EntitiesViewMut,) {
+                                                mut bump_intents: UniqueViewMut<VecDeque<BumpIntent>>,
+                                                mut collect_intents: UniqueViewMut<VecDeque<CollectIntent>>,
+                                                mut handled: UniqueViewMut<ResolvedIntents>) {
 
-    for (bump_id, mut bump) in (&mut bump_intents).iter().with_id().
-        filter(|(_, b)| !b.handled) {
-
+    for bump in bump_intents.iter().filter(|i| !handled.0.contains(&i.id)) {
         for (item_id, (_, pos)) in (&items, &has_position).iter().with_id()
             .filter(|(_, (i, _))| !i.is_collected) {
 
-            if pos.0 != bump.intent.pos { continue; }
-
-            entities.add_entity((&mut collect_intents, ),
-                (bump.spawn(bump_id, CollectIntent{ collector: bump.intent.bumper, item: item_id }), ));
+            if pos.0 == bump.pos {
+                collect_intents.push_back(CollectIntent { id: bump.id, collector: bump.bumper, item: item_id });
+            }
         }
     }
 }
@@ -69,29 +67,28 @@ pub fn on_bump_interpret_as_collect_item_intent(items: View<IsItem>,
 pub fn on_collect_if_possible(mut items: ViewMut<IsItem>,
                               mut has_position: ViewMut<HasPosition>,
                               mut carries_item: ViewMut<CarriesItem>,
-                              mut collect_intents: ViewMut<Handle<CollectIntent>>,
+                              mut collect_intents: UniqueViewMut<VecDeque<CollectIntent>>,
                               mut log: UniqueViewMut<NotificationLog>,
                               mut is_dirty: UniqueViewMut<IsDirty>,
-                              mut entities: EntitiesViewMut,) {
+                              mut entities: EntitiesViewMut,
+                              mut handled: UniqueViewMut<ResolvedIntents>) {
 
-    for mut collect in (&mut collect_intents).iter().
-        filter(|c| !c.handled) {
+    let mut resolved = Vec::new();
+    for collect in collect_intents.iter().filter(|i| !handled.0.contains(&i.id)) {
+        if let Ok(mut item) = (&mut items).get(collect.item)
+        {
+            has_position.remove(collect.item);
+            item.is_collected = true;
 
-        let mut item = (&mut items).get(collect.intent.item).unwrap();
+            log.write(format!("Collected {}.", item.item));
 
-        has_position.remove(collect.intent.item);
-        item.is_collected = true;
+            let carry = CarriesItem { owner: collect.collector, item: collect.item };
+            entities.add_entity((&mut carries_item, ), (carry, ));
 
-        log.write(format!("Collected {}.", item.item));
-
-        let carry = CarriesItem{ owner: collect.intent.collector, item: collect.intent.item };
-        entities.add_entity((&mut carries_item,), (carry,));
-
-        is_dirty.0 = true;
-        collect.handled = true;
+            resolved.push(collect.id);
+            is_dirty.0 = true;
+        }
     }
-}
 
-pub fn on_collect_default(mut storage: AllStoragesViewMut) {
-    propagate_handled_and_delete_rest::<CollectIntent>(&mut storage);
+    for id in resolved { handled.0.insert(id); }
 }

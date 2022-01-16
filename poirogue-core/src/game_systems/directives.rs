@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::rc::Rc;
 use bracket_color::prelude::{BLACK, WHITE};
 use bracket_lib::prelude::{Point, Algorithm2D, BTerm};
@@ -11,45 +12,26 @@ use crate::game_systems::IsLocked;
 use crate::map::Map;
 
 pub struct MoveDirective(pub EntityId, pub Point);
+pub struct UnlockDirective(pub EntityId);
 
-pub fn resolve_move_directives(map: UniqueView<Map>,
-                               mut move_dirs: ViewMut<MoveDirective>,
+pub fn resolve_move_directives(mut move_dirs: UniqueViewMut<VecDeque<MoveDirective>>,
                                mut positions: ViewMut<HasPosition>,
                                mut dirty: UniqueViewMut<IsDirty>,) {
 
-    let mut to_be_removed = Vec::new();
-
-    for mov in (&move_dirs).iter() {
+    while let Some(mov) = move_dirs.pop_back() {
         if let Ok(mut pos) = (&mut positions).get(mov.0) {
             pos.0 = mov.1;
             dirty.0 = true;
-            to_be_removed.push(mov.0);
         }
-    }
-
-    for id in to_be_removed {
-        (&mut move_dirs).remove(id);
     }
 }
 
-pub struct UnlockDirective(pub EntityId);
-
-pub fn resolve_unlock_directive(mut unlock_dirs: ViewMut<UnlockDirective>,
+pub fn resolve_unlock_directive(mut unlock_dirs: UniqueViewMut<VecDeque<UnlockDirective>>,
                                 mut is_locked: ViewMut<IsLocked>,
-                                mut dirty: UniqueViewMut<IsDirty>,
-                                mut entities: EntitiesViewMut) {
+                                mut dirty: UniqueViewMut<IsDirty>,) {
 
-    let mut to_be_removed = Vec::new();
-
-    for (id, dir) in (&unlock_dirs).iter().with_id() {
-        to_be_removed.push(id);
+    while let Some(dir) = unlock_dirs.pop_back() {
         (&mut is_locked).remove(dir.0);
         dirty.0 = true;
-    }
-
-    for id in to_be_removed {
-        unlock_dirs.delete(id);
-        unlock_dirs.remove(id);
-        entities.delete_unchecked(id);
     }
 }

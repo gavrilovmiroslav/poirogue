@@ -29,7 +29,6 @@ use crate::murder_gen::generate_murder;
 use crate::{core_systems, rand_gen};
 use crate::colors::named_color;
 use crate::core_systems::IsCharacter;
-use crate::diagnostics::{create_memory_usage_log, log_overall_memory_usage};
 use crate::entity::{HasFieldOfView, HasGlyph, HasPosition, IsDirty, IsPlayer, PlayerPosition, Time};
 use crate::glyph::Glyph;
 use crate::json::InternalJsonStorage;
@@ -40,7 +39,7 @@ use crate::tiles::{MapTile, MapTileRep, TileIndex};
 use crate::render_view::{RenderViewDefinition};
 use crate::render_view::*;
 use crate::game_systems;
-use crate::game_systems::{BumpIntent, CollectIntent, Handle, InvestigateIntent, IsDoor, IsItem, IsLocked, Item, MoveDirective, NotificationLog, on_bump_interpret_as_investigate_intent, UnlockDirective, UnlockIntent};
+use crate::game_systems::{BumpIntent, CollectIntent, InvestigateIntent, IsDoor, IsItem, IsLocked, Item, MoveDirective, NotificationLog, on_bump_interpret_as_investigate_intent, ResolvedIntents, UnlockDirective, UnlockIntent};
 use crate::maybe::Maybe;
 
 #[derive(Copy, Clone)]
@@ -128,6 +127,7 @@ impl Game {
 
         let (width, height) = (80, 50);
         let term = BTermBuilder::new()
+            .with_fps_cap(200.0)
             .with_vsync(false)
             .with_title("Poirogue")
             .with_font("classic_roguelike_white.png", 8, 8)
@@ -190,9 +190,66 @@ impl Game {
         game.world.add_unique(PlayerPosition(Point::new(0, 0))).unwrap();
         game.world.add_unique(NotificationLog::new(args.log_height, args.log_expiry)).unwrap();
 
-        if args.keep_memory_log {
-            create_memory_usage_log(&mut game.world.borrow::<UniqueViewMut<MemoryUsageLog>>().unwrap());
-        }
+        game.world.add_unique(ResolvedIntents::default());
+        game.world.add_unique(VecDeque::<BumpIntent>::new());
+        game.world.add_unique(VecDeque::<UnlockIntent>::new());
+        game.world.add_unique(VecDeque::<CollectIntent>::new());
+        game.world.add_unique(VecDeque::<InvestigateIntent>::new());
+        game.world.add_unique(VecDeque::<MoveDirective>::new());
+        game.world.add_unique(VecDeque::<UnlockDirective>::new());
+
+        Workload::builder("input handlers")
+            .with_system(&core_systems::on_input_keyboard_exit)
+            .with_system(&core_systems::on_input_keyboard_generate_level)
+            .add_to_world(&game.world).unwrap();
+
+        Workload::builder("realtime updates")
+            .with_system(&game_systems::update_notification_log_expiry)
+            .add_to_world(&game.world).unwrap();
+
+        Workload::builder("dirty-only updates")
+            .with_system(&core_systems::update_player_position)
+            .with_system(&core_systems::update_fields_of_view)
+            .with_system(&core_systems::update_player_vision)
+            .add_to_world(&game.world).unwrap();
+
+        Workload::builder("player input interpretations")
+            .with_system(&core_systems::interpret_player_input_as_bump_intent)
+            .add_to_world(&game.world).unwrap();
+
+        Workload::builder("bump interpretations")
+            .with_system(&game_systems::on_bump_interpret_as_collect_item_intent)
+            .with_system(&game_systems::on_bump_interpret_as_door_unlock_intent)
+            .with_system(&game_systems::on_bump_interpret_as_investigate_intent)
+            .add_to_world(&game.world).unwrap();
+
+        Workload::builder("item actions")
+            .with_system(&game_systems::on_collect_if_possible)
+            .add_to_world(&game.world).unwrap();
+
+        Workload::builder("door actions")
+            .with_system(&game_systems::on_unlock_if_has_key_for_door)
+            .with_system(&game_systems::on_investigate_lock)
+            .with_system(&game_systems::on_bump_open_doors)
+            .add_to_world(&game.world).unwrap();
+
+        Workload::builder("resolve directives")
+            .with_system(&game_systems::resolve_unlock_directive)
+            .with_system(&game_systems::resolve_move_directives)
+            .add_to_world(&game.world).unwrap();
+
+        Workload::builder("move actions")
+            .with_system(&game_systems::on_bump_move_if_empty)
+            .add_to_world(&game.world).unwrap();
+
+        Workload::builder("game systems")
+            .with_workload("player input interpretations")
+            .with_workload("bump interpretations")
+            .with_workload("item actions")
+            .with_workload("door actions")
+            .with_workload("move actions")
+            .with_workload("resolve directives")
+            .add_to_world(&game.world).unwrap();
 
         main_loop(term, game).unwrap();
     }
@@ -200,66 +257,35 @@ impl Game {
 
 impl GameState for Game {
     fn tick(&mut self, ctx: &mut BTerm) {
-        self.world.run(&core_systems::make_input_snapshots).unwrap();
-
         // meta
-        self.world.run(&core_systems::on_input_keyboard_exit).unwrap();
-        self.world.run(&core_systems::on_input_keyboard_generate_level).unwrap();
+        self.world.run(&core_systems::make_input_snapshots).unwrap();
+        self.world.run_workload("input handlers").unwrap();
 
         self.world.run(&core_systems::update_time).unwrap();
-        self.world.run(&core_systems::update_player_position).unwrap();
-        self.world.run(&core_systems::update_dirty_fovs).unwrap();
-        self.world.run(&game_systems::update_notification_log_expiry).unwrap();
-        self.world.run(&core_systems::update_player_vision).unwrap();
+        self.world.run_workload("realtime updates").unwrap();
 
-        // rendering game
-        ctx.set_active_console(0);
-        self.world.run_with_data(&core_systems::render_map, ctx).unwrap();
-        self.world.run_with_data(&game_systems::render_doors, ctx).unwrap();
-        self.world.run_with_data(&game_systems::render_locked_doors, ctx).unwrap();
-        self.world.run_with_data(&game_systems::render_known_locked_doors, ctx).unwrap();
-        self.world.run_with_data(&game_systems::render_items, ctx).unwrap();
-        self.world.run_with_data(&core_systems::render_characters, ctx).unwrap();
+        if self.world.borrow::<UniqueView<IsDirty>>().unwrap().0 {
+            self.world.run_workload("dirty-only updates").unwrap();
 
-        // rendering gui
-        ctx.set_active_console(2);
-        ctx.cls();
-        self.world.run_with_data(&game_systems::render_notification_log, ctx).unwrap();
+            // rendering game
+            self.world.run_with_data(&core_systems::clear_game_layers, ctx).unwrap();
+            self.world.run_with_data(&core_systems::render_map, ctx).unwrap();
+            self.world.run_with_data(&game_systems::render_doors, ctx).unwrap();
+            self.world.run_with_data(&game_systems::render_locked_doors, ctx).unwrap();
+            self.world.run_with_data(&game_systems::render_known_locked_doors, ctx).unwrap();
+            self.world.run_with_data(&game_systems::render_items, ctx).unwrap();
+            self.world.run_with_data(&core_systems::render_characters, ctx).unwrap();
+        }
+
+        // rendering gui every frame
+        self.world.run_with_data(&core_systems::clear_ui_layer, ctx).unwrap();
         self.world.run_with_data(&game_systems::render_fps, ctx).unwrap();
+        self.world.run_with_data(&game_systems::render_notification_log, ctx).unwrap();
 
         // cleanup
         self.world.run(&core_systems::clean_dirty).unwrap();
-
-        // input
-        self.world.run(&core_systems::interpret_player_input_as_bump_intent).unwrap();
-
-        self.world.run(&game_systems::on_bump_interpret_as_collect_item_intent).unwrap();
-        self.world.run(&game_systems::on_collect_if_possible).unwrap();
-        self.world.run(&game_systems::on_collect_default).unwrap();
-
-        self.world.run(&game_systems::on_bump_interpret_as_door_unlock_intent).unwrap();
-        self.world.run(&game_systems::on_unlock_if_has_key_for_door).unwrap();
-        self.world.run(&game_systems::on_unlock_default).unwrap();
-
-        self.world.run(&game_systems::on_bump_interpret_as_investigate_intent).unwrap();
-        self.world.run(&game_systems::on_investigate_lock).unwrap();
-        self.world.run(&game_systems::on_investigate_default).unwrap();
-
-        self.world.run(&game_systems::on_bump_open_doors).unwrap();
-        self.world.run(&game_systems::on_bump_default).unwrap();
-
-        // resolve directives
-        self.world.run(&game_systems::resolve_unlock_directive).unwrap();
-        self.world.run(&game_systems::resolve_move_directives).unwrap();
-
-        self.world.run(&game_systems::delete_handled_intents).unwrap();
-
-        if self.debug {
-            let time = self.world.borrow::<UniqueView<Time>>().unwrap().0;
-            if time % 100 == 0 {
-                log_overall_memory_usage(time, &self.world, &mut self.world.borrow::<UniqueViewMut<MemoryUsageLog>>().unwrap());
-            }
-        }
+        self.world.run_workload("game systems").unwrap();
+        self.world.run(&game_systems::delete_intents).unwrap();
 
         if self.world.borrow::<UniqueView<FlagExit>>().unwrap().0 {
             ctx.quit();
