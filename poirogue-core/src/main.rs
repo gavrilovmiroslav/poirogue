@@ -11,7 +11,6 @@ mod murder_gen;
 mod map_gen;
 mod map;
 mod input;
-mod render_view;
 mod tiles;
 mod readonly_archive_cave;
 mod opt;

@@ -187,7 +187,6 @@ pub fn on_unlock_if_has_key_for_door(items: View<IsItem>,
     for id in resolved { handled.0.insert(id); }
 }
 
-
 pub fn on_investigate_lock(has_pos: View<HasPosition>,
                            is_locked: View<IsLocked>,
                            is_item: View<IsItem>,

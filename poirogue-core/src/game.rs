@@ -10,6 +10,7 @@ use std::path::Path;
 use std::rc::Rc;
 use bracket_terminal::prelude::*;
 use std::sync::{Arc, Mutex, RwLock};
+use bracket_color::prelude::RGB;
 use bracket_lib::prelude::*;
 use caves::{Cave, FileCave, MemoryCave};
 use object_pool::{Pool, Reusable};
@@ -35,15 +36,17 @@ use crate::json::InternalJsonStorage;
 use crate::opt::Opt;
 use crate::rand_gen::{get_random_between, get_random_from, get_random_sub};
 use crate::rex::draw_rex;
-use crate::tiles::{MapTile, MapTileRep, TileIndex};
-use crate::render_view::{RenderViewDefinition};
-use crate::render_view::*;
+use crate::tiles::{MapTile, TileIndex};
 use crate::game_systems;
 use crate::game_systems::{BumpIntent, CollectIntent, InvestigateIntent, IsDoor, IsItem, IsLocked, Item, MoveDirective, NotificationLog, on_bump_interpret_as_investigate_intent, ResolvedIntents, UnlockDirective, UnlockIntent};
 use crate::maybe::Maybe;
+use crate::colors::*;
 
 #[derive(Copy, Clone)]
 pub struct FlagDebug(pub bool);
+
+#[derive(Copy, Clone)]
+pub struct FlagRecompileScripts(pub bool);
 
 #[derive(Copy, Clone)]
 pub struct FlagExit(pub bool);
@@ -54,8 +57,9 @@ pub struct MemoryUsageLog(pub(crate) PickleDb);
 #[derive(Copy, Clone)]
 pub struct WindowSize(pub (i32, i32));
 
-pub struct Binary(Box<dyn Cave>);
-pub struct Batch(pub(crate) Reusable<'static, DrawBatch>);
+pub struct BinaryData(pub Box<dyn Cave>);
+pub struct Batch(pub Reusable<'static, DrawBatch>);
+pub struct Scripting(pub rhai::Engine);
 
 pub struct Game {
     pub debug: bool,
@@ -94,27 +98,6 @@ impl Game {
         }
     }
 
-    pub fn register_render_view(&self, view: RenderView) {
-        fn view_to_file(view: &RenderView) -> &str {
-            match view {
-                RenderView::Game => "game.view.json",
-                RenderView::Debug => "debug.view.json",
-            }
-        }
-
-        let filename = view_to_file(&view);
-        let rep = {
-            if let Some(json) = self.world.borrow::<UniqueView<Binary>>().unwrap().0.get_json::<MapTileRep>(filename) {
-                json
-            } else {
-                self.world.borrow::<UniqueViewMut<Binary>>().unwrap().0.set_json(filename, &MapTileRep::default());
-                MapTileRep::default()
-            }
-        };
-
-        cache_render_view_rep(view, rep);
-    }
-
     pub fn run(args: Opt) {
         println!("{:?}", args);
         rand_gen::init_random_with_seed(args.random_seed);
@@ -148,11 +131,32 @@ impl Game {
 
         let mut game = Game::new(&args);
 
+        game.world.add_unique(FlagRecompileScripts(true)).expect("Added FlagRecompileScripts");
         game.world.add_unique(FlagDebug(args.keep_memory_log)).expect("Added FlagDebug");
         game.world.add_unique(FlagExit(false)).expect("Added FlagExit");
         game.world.add_unique(WindowSize((width, height))).expect("Added WindowSize");
         game.world.add_unique(Map::new(width, height)).expect("Added Map");
         game.world.add_unique(GameFlow::Player).expect("Added GameFlow");
+
+        {
+            let engine = {
+                use crate::tiles::*;
+                let mut engine = rhai::Engine::new();
+                engine.register_type_with_name::<MapTile>("MapTile")
+                    .register_fn("name", MapTile::name);
+
+                engine.register_type_with_name::<RGB>("RGB")
+                    .register_fn("make_rgb", |r: i64, g: i64, b: i64| RGB::from((r as u8, g as u8, b as u8)));
+
+                engine.register_type_with_name::<Point>("Point")
+                    .register_fn("get_x", |p: Point| p.x as i64)
+                    .register_fn("get_y", |p: Point| p.y as i64);
+
+                engine
+            };
+
+            game.world.add_unique(Scripting(engine));
+        }
 
         {
             let mut commands = VecDeque::<GameCommand>::new();
@@ -180,7 +184,7 @@ impl Game {
                 SerializationMethod::Json))).expect("Added MemoryUsageLog");
         }
 
-        game.world.add_unique(Binary(if args.release_mode {
+        game.world.add_unique(BinaryData(if args.release_mode {
             Box::new(ReadonlyArchiveCave::open(format!("{}.bin", args.data_directory)))
         } else {
             Box::new(FileCave::new(Path::new(args.data_directory.as_str())).unwrap())
@@ -201,6 +205,7 @@ impl Game {
         game.world.add_unique(VecDeque::<UnlockDirective>::new()).unwrap();
 
         Workload::builder("input handlers")
+            .with_system(&game_systems::on_input_mark_recompile_scripts)
             .with_system(&game_systems::on_input_keyboard_exit)
             .with_system(&game_systems::on_input_keyboard_generate_level)
             .add_to_world(&game.world).unwrap();
@@ -300,6 +305,8 @@ impl GameState for Game {
 
         self.world.run(&core_systems::update_time).unwrap();
         self.world.run_workload("realtime updates").unwrap();
+
+        self.world.run(&core_systems::clear_ast_lru_cache_if_requested).unwrap();
 
         if self.world.borrow::<UniqueView<IsDirty>>().unwrap().0 {
             ctx.set_active_console(MAP_CONSOLE_LAYER); ctx.cls();

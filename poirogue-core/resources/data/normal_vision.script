@@ -1,0 +1,25 @@
+
+fn light_fall(light_strength, light_pos, pos) {
+    let fov = light_strength.to_float() + 1.0;
+    let dx = get_x(light_pos) - get_x(pos);
+    let dy = get_y(light_pos) - get_y(pos);
+    let d = (dx * dx + dy * dy).to_float();
+    let sqrt_d = sqrt(d);
+    let in_fov = sqrt_d / fov;
+    (1.0 - in_fov * 255.0).to_int()
+}
+
+fn perceive(tile, pos) {
+    let ch = switch tile.name() {
+        "Obscured" => '#',
+        "Floor" => '.',
+        "Corridor" => '.',
+        "Door" => '+',
+        _ => ' ',
+    };
+
+    let dist = light_fall(player_fov, player_pos, pos);
+    let fg = make_rgb(dist, dist, dist);
+    let bg = make_rgb(0, 0, 0);
+    return [ ch, fg, bg ];
+}

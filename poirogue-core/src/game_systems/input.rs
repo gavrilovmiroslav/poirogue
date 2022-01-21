@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 use bracket_lib::prelude::VirtualKeyCode;
 use shipyard::{UniqueView, UniqueViewMut};
 use crate::commands::{FlowCommand, GameCommand};
-use crate::game::FlagExit;
+use crate::game::{FlagExit, FlagRecompileScripts};
 use bracket_lib::prelude::INPUT;
 use crate::input::*;
 
@@ -11,6 +11,14 @@ pub fn make_input_snapshots(mut keyboard: UniqueViewMut<KeyboardSnapshot>,
     use std::borrow::Borrow;
     keyboard.update(INPUT.lock().borrow());
     mouse.update(INPUT.lock().borrow());
+}
+
+pub fn on_input_mark_recompile_scripts(keyboard: UniqueView<KeyboardSnapshot>,
+                                       mut recompile: UniqueViewMut<FlagRecompileScripts>) {
+
+    if keyboard.is_pressed(VirtualKeyCode::F5) {
+        recompile.0 = true;
+    }
 }
 
 pub fn on_input_keyboard_generate_level(keyboard: UniqueView<KeyboardSnapshot>,
