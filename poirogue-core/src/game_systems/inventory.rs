@@ -5,7 +5,6 @@ use bracket_color::prelude::{BLACK, ColorPair, DARK_GRAY};
 use bracket_lib::prelude::{Point, Algorithm2D, BTerm};
 use shipyard::{AddEntity, AllStoragesViewMut, EntitiesViewMut, EntityId, Get, IntoIter, IntoWithId, Not, Remove, SparseSet, Storage, UniqueView, UniqueViewMut, View, ViewMut};
 use crate::colors::{ColorShifter, named_color};
-use crate::core_systems::IsCharacter;
 use crate::entity::{HasFieldOfView, HasGlyph, HasPosition, IsDirty, IsInvisible, IsPlayer};
 use crate::game::{Batch, Store};
 use crate::game_systems::{BumpIntent, CollectIntent, MoveDirective, NotificationLog, ResolvedIntents};

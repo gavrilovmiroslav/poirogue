@@ -2,7 +2,7 @@ use std::any::type_name;
 use std::str;
 use std::borrow::{Borrow, BorrowMut};
 use std::cell::RefCell;
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::collections::hash_map::RandomState;
 use std::fs;
 use std::ops::Deref;
@@ -29,7 +29,6 @@ use crate::map_gen::run_map_gen;
 use crate::murder_gen::generate_murder;
 use crate::{core_systems, DRAWING_CONSOLE_LAYER, MAP_CONSOLE_LAYER, rand_gen, UI_CONSOLE_LAYER};
 use crate::colors::named_color;
-use crate::core_systems::IsCharacter;
 use crate::entity::{HasFieldOfView, HasGlyph, HasPosition, IsDirty, IsPlayer, PlayerPosition, Time};
 use crate::glyph::Glyph;
 use crate::json::InternalJsonStorage;
@@ -142,11 +141,13 @@ impl Game {
             let engine = {
                 use crate::tiles::*;
                 let mut engine = rhai::Engine::new();
+
                 engine.register_type_with_name::<MapTile>("MapTile")
                     .register_fn("name", MapTile::name);
 
                 engine.register_type_with_name::<RGB>("RGB")
-                    .register_fn("make_rgb", |r: i64, g: i64, b: i64| RGB::from((r as u8, g as u8, b as u8)));
+                    .register_fn("make_rgb", |r: i64, g: i64, b: i64| RGB::from((r as u8, g as u8, b as u8)))
+                    .register_fn("*", |a: RGB, b: RGB| a * b);
 
                 engine.register_type_with_name::<Point>("Point")
                     .register_fn("get_x", |p: Point| p.x as i64)
@@ -220,7 +221,6 @@ impl Game {
 
         Workload::builder("dirty-only updates")
             .with_system(&core_systems::update_player_position)
-            .with_system(&core_systems::update_fields_of_view)
             .with_system(&core_systems::update_player_vision)
             .add_to_world(&game.world).unwrap();
 

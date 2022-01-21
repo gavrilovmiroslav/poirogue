@@ -23,9 +23,6 @@ use crate::rand_gen::{get_random_from, get_random_sub};
 use crate::tiles::{MapTile, TileIndex};
 use rhai::{Array, AST, Dynamic, Engine, Scope};
 
-pub struct IsCharacter;
-pub struct HasSight(u8);
-
 pub fn on_command_generate_level(mut storages: AllStoragesViewMut,) {
     use GameCommand::*;
     use FlowCommand::*;
@@ -71,6 +68,7 @@ pub fn on_command_generate_level(mut storages: AllStoragesViewMut,) {
                  HasPosition(starting_pos),
                  HasGlyph(Glyph::new('@')),
                  HasFieldOfView(Vec::new()),
+                 HasSight(16),
                  Vision("normal_vision.script".to_string()), ));
 
             { *storages.borrow::<UniqueViewMut<Map>>().expect("Map") = new_map; }
@@ -83,17 +81,6 @@ pub fn on_command_generate_level(mut storages: AllStoragesViewMut,) {
 
 pub fn update_time(mut time: UniqueViewMut<Time>,) {
     time.0 += 1;
-}
-
-pub fn update_fields_of_view(map: UniqueView<Map>,
-                             positions: View<HasPosition>,
-                             sights: View<HasSight>,
-                             mut fovs: ViewMut<HasFieldOfView>,) {
-
-    for (id, (pos, mut fov)) in (&positions, &mut fovs).iter().with_id() {
-        let sight = (&sights).get(id).unwrap_or(&HasSight(8));
-        fov.0 = field_of_view_set(pos.0, sight.0 as i32, &*map).into_iter().collect()
-    }
 }
 
 pub fn update_player_vision(mut map: UniqueViewMut<Map>,
@@ -166,61 +153,70 @@ pub fn clear_ast_lru_cache_if_requested(mut recompile: UniqueViewMut<FlagRecompi
     }
 }
 
+pub fn get_from_cache_or_recompile_script(cache_name: &'static str, script_name: &String, data: &BinaryData, engine: &Engine) -> Result<AST, rhai::ParseError> {
+
+    let mut cache = AST_LRU.lock().unwrap();
+    if !cache.contains(&cache_name) {
+        let perception_code = vec_u8_to_str(data.0.get(script_name.as_str()).expect(format!("Script unknown: {}", script_name).as_str()));
+        match engine.compile(perception_code.as_str()) {
+            Ok(ast) => {
+                cache.put(cache_name, ast.clone());
+                Ok(ast)
+            },
+
+            Err(err) => {
+                Err(err)
+            }
+        }
+    } else {
+        Ok(cache.get(&cache_name).unwrap().clone())
+    }
+}
+
 pub fn render_player_field_of_view(mut batch: UniqueViewMut<Batch>,
-                                   mut map: UniqueViewMut<Map>,
                                    mut scripting: UniqueViewMut<Scripting>,
-                                   mut log: UniqueViewMut<NotificationLog>,
+                                   mut map: UniqueViewMut<Map>,
+                                   mut has_fov: ViewMut<HasFieldOfView>,
+                                   sights: View<HasSight>,
                                    data: UniqueView<BinaryData>,
-                                   has_fov: View<HasFieldOfView>,
                                    is_player: View<IsPlayer>,
                                    has_pos: View<HasPosition>,
                                    visions: View<Vision>,) {
 
-    if let Some((fov, vision, pos, _)) = (&has_fov, &visions, &has_pos, &is_player).iter().take(1).next() {
-        let ast = {
-            let mut cache = AST_LRU.lock().unwrap();
-            if !cache.contains(&"render_player_field_of_view_ast") {
-                let perception_code = vec_u8_to_str(data.0.get(vision.0.as_str()).expect("Perception unknown"));
-                let ast = scripting.0.compile(perception_code.as_str());
-                match ast {
-                    Ok(ast) => {
-                        cache.put("render_player_field_of_view_ast", ast.clone());
-                        Ok(ast)
-                    },
-
-                    Err(err) => {
-                        log.write(format!("{:?}", err));
-                        Err(err)
-                    }
-                }
-            } else {
-                Ok(cache.get(&"render_player_field_of_view_ast").unwrap().clone())
-            }
-        };
+    if let Some((vision, pos, sight, mut fov, _)) = (&visions, &has_pos, &sights, &mut has_fov, &is_player).iter().take(1).next() {
+        let ast = get_from_cache_or_recompile_script(
+            "render_player_field_of_view_ast", &vision.0, &data, &scripting.0);
 
         match ast {
             Ok(ast) => {
                 let mut scope = Scope::new();
-                scope.push("player_pos", pos.0);
-                scope.push("player_fov", 8);
-
                 batch.0.target(MAP_CONSOLE_LAYER);
-                for pt in &fov.0 {
-                    if let Some(tile_index) = map.get_tile_index_from_point(*pt) {
-                        let result: Result<Array, _> = scripting.0.call_fn(&mut scope, &ast, "perceive", (map.tiles[tile_index], *pt));
-                        match result {
-                            Ok(result) => {
-                                let ch = result[0].clone_cast::<char>() as u16;
-                                let fg = result[1].clone_cast::<RGB>();
-                                let bg = result[2].clone_cast::<RGB>();
-                                batch.0.set(*pt, ColorPair::new(fg, bg), ch);
-                            },
 
-                            Err(err) => {
-                                println!("{:?}", err);
-                            }
-                        }
+                fov.0 = field_of_view_set(pos.0, sight.0 as i32, &*map).into_iter().collect();
+
+                let fov_list: Array = {
+                    fov.0.iter().map(|pt| {
+                        let tile_name = map.get_tile_at_point(&pt).name();
+
+                        Dynamic::from_iter(vec![
+                            Dynamic::from(pt.clone()), Dynamic::from(tile_name),
+                        ])
+                    }).collect()
+                };
+
+                let result: Result<Array, _> = scripting.0.call_fn(&mut scope, &ast, "perceive", (fov_list, sight.0, pos.0));
+
+                if let Ok(pts) = result {
+                    for pt in pts {
+                        let arr = pt.clone_cast::<Array>();
+                        let pt = arr[0].clone_cast::<Point>();
+                        let ch = arr[1].clone_cast::<char>() as u16;
+                        let fg = arr[2].clone_cast::<RGB>();
+                        let bg = arr[3].clone_cast::<RGB>();
+                        batch.0.set(pt, ColorPair::new(fg, bg), ch);
                     }
+                } else {
+                    println!("{:?}", result.err().unwrap());
                 }
             },
 
