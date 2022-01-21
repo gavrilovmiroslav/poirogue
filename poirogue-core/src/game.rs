@@ -30,7 +30,7 @@ use crate::murder_gen::generate_murder;
 use crate::{core_systems, DRAWING_CONSOLE_LAYER, MAP_CONSOLE_LAYER, rand_gen, UI_CONSOLE_LAYER};
 use crate::colors::named_color;
 use crate::entity::{HasFieldOfView, HasGlyph, HasPosition, IsDirty, IsPlayer, PlayerPosition, Time};
-use crate::glyph::Glyph;
+use crate::glyph::{Glyph, GlyphMap, register_glyphs};
 use crate::json::InternalJsonStorage;
 use crate::opt::Opt;
 use crate::rand_gen::{get_random_between, get_random_from, get_random_sub};
@@ -135,6 +135,7 @@ impl Game {
         game.world.add_unique(FlagExit(false)).expect("Added FlagExit");
         game.world.add_unique(WindowSize((width, height))).expect("Added WindowSize");
         game.world.add_unique(Map::new(width, height)).expect("Added Map");
+        game.world.add_unique(GlyphMap::new(width, height)).expect("Added GlyphMap");
         game.world.add_unique(GameFlow::Player).expect("Added GameFlow");
 
         {
@@ -152,6 +153,8 @@ impl Game {
                 engine.register_type_with_name::<Point>("Point")
                     .register_fn("get_x", |p: Point| p.x as i64)
                     .register_fn("get_y", |p: Point| p.y as i64);
+
+                register_glyphs(&mut engine);
 
                 engine
             };

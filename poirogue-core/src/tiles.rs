@@ -2,7 +2,7 @@ use bracket_color::prelude::RGB;
 use serde::{Serialize, Deserialize};
 use strum_macros::Display;
 use crate::colors::Color;
-use crate::glyph::{Glyph, GlyphOpt};
+use crate::glyph::{Glyph};
 
 pub type TileIndex = usize;
 pub type RectIndex = usize;
