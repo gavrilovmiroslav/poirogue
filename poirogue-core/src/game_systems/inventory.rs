@@ -31,11 +31,11 @@ pub fn render_items(mut batch: UniqueViewMut<Batch>,
                     has_fov: View<HasFieldOfView>,
                     is_player: View<IsPlayer>,) {
 
-    if let Some((sight, _)) = (&has_fov, &is_player).iter().take(1).next() {
+    if let Some((fov, _)) = (&has_fov, &is_player).iter().take(1).next() {
         batch.0.target(MAP_CONSOLE_LAYER);
 
         for (_, pos, glyph) in (&is_item, &has_position, &has_glyph).iter().filter(|i| !i.0.is_collected) {
-            let is_visible = sight.fov.contains(&pos.0);
+            let is_visible = fov.0.contains(&pos.0);
             let fg = if is_visible { glyph.0.fg } else { named_color(DARK_GRAY).darken(0.5) };
 
             if is_visible {

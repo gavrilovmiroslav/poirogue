@@ -17,7 +17,6 @@ pub fn on_input_mark_recompile_scripts(keyboard: UniqueView<KeyboardSnapshot>,
                                        mut recompile: UniqueViewMut<FlagRecompileScripts>) {
 
     if keyboard.is_pressed(VirtualKeyCode::F5) {
-        println!("Recompiling scripts");
         recompile.0 = true;
     }
 }

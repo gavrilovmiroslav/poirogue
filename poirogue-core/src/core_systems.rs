@@ -45,7 +45,7 @@ pub fn on_command_generate_level(mut storages: AllStoragesViewMut,) {
             for door in all_doors {
                 let pos = new_map.index_to_point2d(door);
                 let mut door_entity = storages.add_entity(
-                    (IsDoor(true), HasPosition(pos), HasGlyph(Glyph::char_only('+'))));
+                    (IsDoor(true), HasPosition(pos), HasGlyph(Glyph::new('+'))));
 
                 if some_doors.contains(&door) {
                     let pt = get_random_from(&storage.rects).center();
@@ -53,7 +53,7 @@ pub fn on_command_generate_level(mut storages: AllStoragesViewMut,) {
                     let key_entity = storages.add_entity(
                         (IsItem { item: key, is_collected: false },
                          HasPosition(pt),
-                         HasGlyph(Glyph::char_only('(')),
+                         HasGlyph(Glyph::new('(')),
                         ));
 
                     storages.add_component(door_entity, (IsLocked { key: key_entity }, ));
@@ -66,9 +66,10 @@ pub fn on_command_generate_level(mut storages: AllStoragesViewMut,) {
                 (IsPlayer,
                  IsCharacter,
                  HasPosition(starting_pos),
-                 HasGlyph(Glyph::char_only('@')),
-                 HasFieldOfView::new(16, "normal_vision.script"),
-                ));
+                 HasGlyph(Glyph::new('@')),
+                 HasFieldOfView(Vec::new()),
+                 HasSight(16),
+                 Vision("normal_vision.script".to_string()), ));
 
             { *storages.borrow::<UniqueViewMut<Map>>().expect("Map") = new_map; }
         }
@@ -84,11 +85,11 @@ pub fn update_time(mut time: UniqueViewMut<Time>,) {
 
 pub fn update_player_vision(mut map: UniqueViewMut<Map>,
                             is_player: View<IsPlayer>,
-                            sighted: View<HasFieldOfView>, ) {
+                            fovs: View<HasFieldOfView>, ) {
 
-    for (_, sight) in (&is_player, &sighted).iter() {
+    for (_, fov) in (&is_player, &fovs).iter() {
         map.hide();
-        map.show(&sight.fov);
+        map.show(&fov.0);
     }
 }
 
@@ -145,7 +146,6 @@ lazy_static! {
 pub fn clear_ast_lru_cache_if_requested(mut recompile: UniqueViewMut<FlagRecompileScripts>,
                                         mut is_dirty: UniqueViewMut<IsDirty>) {
     if recompile.0 {
-        println!("Clearing AST cache!");
         let mut cache = AST_LRU.lock().unwrap();
         cache.clear();
         recompile.0 = false;
@@ -161,12 +161,10 @@ pub fn get_from_cache_or_recompile_script(cache_name: &'static str, script_name:
         match engine.compile(perception_code.as_str()) {
             Ok(ast) => {
                 cache.put(cache_name, ast.clone());
-                println!("Putting AST {} into cache.", cache_name);
                 Ok(ast)
             },
 
             Err(err) => {
-                println!("Error compiling script {}: {:?}", cache_name, err);
                 Err(err)
             }
         }
@@ -179,23 +177,25 @@ pub fn render_player_field_of_view(mut batch: UniqueViewMut<Batch>,
                                    mut scripting: UniqueViewMut<Scripting>,
                                    mut map: UniqueViewMut<Map>,
                                    mut has_fov: ViewMut<HasFieldOfView>,
+                                   sights: View<HasSight>,
                                    data: UniqueView<BinaryData>,
                                    is_player: View<IsPlayer>,
-                                   has_pos: View<HasPosition>,) {
+                                   has_pos: View<HasPosition>,
+                                   visions: View<Vision>,) {
 
-    if let Some((pos, mut sight, _)) = (&has_pos, &mut has_fov, &is_player).iter().take(1).next() {
+    if let Some((vision, pos, sight, mut fov, _)) = (&visions, &has_pos, &sights, &mut has_fov, &is_player).iter().take(1).next() {
         let ast = get_from_cache_or_recompile_script(
-            "render_player_field_of_view_ast", &sight.vision, &data, &scripting.0);
+            "render_player_field_of_view_ast", &vision.0, &data, &scripting.0);
 
         match ast {
             Ok(ast) => {
                 let mut scope = Scope::new();
                 batch.0.target(MAP_CONSOLE_LAYER);
 
-                sight.fov = field_of_view_set(pos.0, sight.distance as i32, &*map).into_iter().collect();
+                fov.0 = field_of_view_set(pos.0, sight.0 as i32, &*map).into_iter().collect();
 
                 let fov_list: Array = {
-                    sight.fov.iter().map(|pt| {
+                    fov.0.iter().map(|pt| {
                         let tile_name = map.get_tile_at_point(&pt).name();
 
                         Dynamic::from_iter(vec![
@@ -204,7 +204,7 @@ pub fn render_player_field_of_view(mut batch: UniqueViewMut<Batch>,
                     }).collect()
                 };
 
-                let result: Result<Array, _> = scripting.0.call_fn(&mut scope, &ast, "perceive", (fov_list, sight.distance, pos.0));
+                let result: Result<Array, _> = scripting.0.call_fn(&mut scope, &ast, "perceive", (fov_list, sight.0, pos.0));
 
                 if let Ok(pts) = result {
                     for pt in pts {
@@ -235,12 +235,12 @@ pub fn render_player_visible_characters(mut batch: UniqueViewMut<Batch>,
                                         glyphs: View<HasGlyph>,
                                         invisible: View<IsInvisible>,) {
 
-    if let Some((sight, _)) = (&has_fov, &is_player).iter().take(1).next() {
+    if let Some((fov, _)) = (&has_fov, &is_player).iter().take(1).next() {
         batch.0.target(MAP_CONSOLE_LAYER);
         for (_, has_pos, has_glyph, _) in (&character, &positions, &glyphs, !&invisible).iter() {
             let glyph = has_glyph.0;
             let pos = has_pos.0;
-            if sight.fov.contains(&pos) {
+            if fov.0.contains(&pos) {
                 batch.0.set(pos, ColorPair::new(glyph.fg, glyph.bg), glyph.ch as u16);
             }
         }

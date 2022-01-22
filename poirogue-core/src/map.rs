@@ -129,7 +129,7 @@ impl Map {
         }
     }
 
-    pub fn show(&mut self, vis: &HashSet<Point>) {
+    pub fn show(&mut self, vis: &[Point]) {
         for p in vis {
             let index = self.point2d_to_index(*p);
             self.visible[index] = true;
