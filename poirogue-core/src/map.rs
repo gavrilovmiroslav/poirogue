@@ -44,10 +44,6 @@ impl Map {
         &self.tiles[tile_index]
     }
 
-    pub fn get_tile_at_point(&self, point: &Point) -> &MapTile {
-        &self.tiles[self.get_tile_index_from_point(*point).unwrap()]
-    }
-
     pub fn get_tile_index_from_point(&self, p: Point) -> Option<usize> {
         if self.is_valid_tile(p.x, p.y) {
             Some(((p.y * self.width) + p.x) as usize)

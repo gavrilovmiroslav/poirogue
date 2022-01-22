@@ -12,10 +12,8 @@ impl HasPosition {
 
 pub struct HasGlyph(pub Glyph);
 pub struct HasFieldOfView(pub Vec<Point>);
+pub struct IsInvisible;
 pub struct IsPlayer;
-pub struct IsCharacter;
 pub struct PlayerPosition(pub Point);
 pub struct Time(pub(crate) u64);
 pub struct IsDirty(pub bool);
-pub struct HasSight(pub u8);
-pub struct IsInvisible;

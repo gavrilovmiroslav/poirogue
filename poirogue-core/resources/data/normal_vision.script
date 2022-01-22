@@ -9,32 +9,17 @@ fn light_fall(light_strength, light_pos, pos) {
     (1.0 - in_fov * 255.0).to_int()
 }
 
-fn get_glyph_for(tile) {
-    switch tile {
+fn perceive(tile, pos) {
+    let ch = switch tile.name() {
         "Obscured" => '#',
         "Floor" => '.',
         "Corridor" => '.',
         "Door" => '+',
         _ => ' ',
-    }
-}
+    };
 
-fn perceive(tiles, fov_distance, player_pos) {
-    let perception = [];
-
+    let dist = light_fall(player_fov, player_pos, pos);
+    let fg = make_rgb(dist, dist, dist);
     let bg = make_rgb(0, 0, 0);
-    let ambient = make_rgb(130, 100, 100);
-
-    for t in tiles {
-        let tile_pos = t[0];
-        let tile = t[1];
-
-        let dist = light_fall(fov_distance, player_pos, tile_pos);
-        let ch = get_glyph_for(tile);
-        let fg = make_rgb(dist, dist, dist);
-        let res = [ tile_pos, ch, fg * ambient, bg ];
-        perception.push(res);
-    }
-
-    perception
+    return [ ch, fg, bg ];
 }

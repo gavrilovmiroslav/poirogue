@@ -31,7 +31,7 @@ impl Default for MapTile {
 }
 
 impl MapTile {
-    pub fn name(&self) -> String {
+    pub fn name(&mut self) -> String {
         (match &self {
             MapTile::Debug(_) => "Debug",
             MapTile::Obscured => "Obscured",
