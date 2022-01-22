@@ -2,10 +2,10 @@ use std::borrow::Borrow;
 use std::sync::Mutex;
 use bracket_lib::prelude::{BTerm, xp_to_draw_batch, XpFile};
 use caves::Cave;
+use lazy_static::*;
 use object_pool::Reusable;
 use crate::game::{Game};
 use bracket_lib::prelude::DrawBatch;
-use lazy_static::*;
 use lru::{DefaultHasher, LruCache};
 
 lazy_static! {

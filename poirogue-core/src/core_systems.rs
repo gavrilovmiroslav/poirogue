@@ -3,25 +3,25 @@ use std::collections::hash_map::RandomState;
 use bracket_terminal::prelude::INPUT;
 use bracket_color::prelude::{BLACK, ColorPair, WHITE};
 use bracket_lib::prelude::{Algorithm2D, BTerm, field_of_view_set, VirtualKeyCode, Point, Input, DrawBatch};
-use shipyard::{AddEntity, AllStoragesViewMut, EntitiesViewMut, EntityId, Get, IntoIter, IntoWithId, NonSendSync, Storage, Unique, UniqueView, UniqueViewMut, View, ViewMut, World};
+use shipyard::{AddEntity, AllStoragesViewMut, EntitiesViewMut, EntityId, Get, IntoIter, IntoWithId, Storage, Unique, UniqueView, UniqueViewMut, View, ViewMut, World};
 use bracket_color::prelude::RGB;
 use serde::{Serialize, Deserialize, Serializer, Deserializer};
 use serde::ser::{Error, SerializeStruct};
-use crate::colors::{ColorShifter, named_color};
+use crate::colors::named_color;
 use crate::commands::{FlowCommand, GameCommand, HackCommand};
 use crate::entity::*;
-use crate::game::{Batch, BinaryData, FlagExit, FlagRecompileScripts, Scripting, Store, WindowSize};
+use crate::game::{Batch, FlagExit, Store, WindowSize};
 use crate::input::{InputSnapshot, InputSnapshots, KeyboardSnapshot, MouseSnapshot};
 use crate::map::Map;
 use crate::game_systems::directives::MoveDirective;
-use crate::game_systems::{CollectIntent, InvestigateIntent, IsDoor, IsItem, IsLocked, NotificationLog};
+use crate::game_systems::{CollectIntent, InvestigateIntent, IsDoor, IsItem, IsLocked};
 use crate::game_systems::intents::{BumpIntent, UnlockIntent};
 use crate::glyph::Glyph;
 use crate::{MAP_CONSOLE_LAYER, UI_CONSOLE_LAYER};
 use crate::map_gen::run_map_gen;
 use crate::rand_gen::{get_random_from, get_random_sub};
+use crate::render_view::RenderView;
 use crate::tiles::{MapTile, TileIndex};
-use rhai::{Array, AST, Dynamic, Engine, Scope};
 
 pub struct IsCharacter;
 pub struct HasSight(u8);
@@ -70,8 +70,7 @@ pub fn on_command_generate_level(mut storages: AllStoragesViewMut,) {
                  IsCharacter,
                  HasPosition(starting_pos),
                  HasGlyph(Glyph::new('@')),
-                 HasFieldOfView(Vec::new()),
-                 Vision("normal_vision.script".to_string()), ));
+                 HasFieldOfView(Vec::new()), ));
 
             { *storages.borrow::<UniqueViewMut<Map>>().expect("Map") = new_map; }
         }
@@ -141,91 +140,23 @@ pub fn update_player_position(is_player: View<IsPlayer>,
     }
 }
 
-pub struct Vision(pub String);
-
-fn vec_u8_to_str(us: Vec<u8>) -> String {
-    String::from_utf8(us).unwrap()
-}
-
-use lazy_static::*;
-use std::sync::Mutex;
-use log::Log;
-use lru::{DefaultHasher, LruCache};
-
-lazy_static! {
-    static ref AST_LRU: Mutex<LruCache<&'static str, AST>> = Mutex::new(LruCache::with_hasher(2, DefaultHasher::default()));
-}
-
-pub fn clear_ast_lru_cache_if_requested(mut recompile: UniqueViewMut<FlagRecompileScripts>,
-                                        mut is_dirty: UniqueViewMut<IsDirty>) {
-    if recompile.0 {
-        let mut cache = AST_LRU.lock().unwrap();
-        cache.clear();
-        recompile.0 = false;
-        is_dirty.0 = true;
-    }
-}
-
 pub fn render_player_field_of_view(mut batch: UniqueViewMut<Batch>,
                                    mut map: UniqueViewMut<Map>,
-                                   mut scripting: UniqueViewMut<Scripting>,
-                                   mut log: UniqueViewMut<NotificationLog>,
-                                   data: UniqueView<BinaryData>,
                                    has_fov: View<HasFieldOfView>,
-                                   is_player: View<IsPlayer>,
-                                   has_pos: View<HasPosition>,
-                                   visions: View<Vision>,) {
+                                   is_player: View<IsPlayer>,) {
 
-    if let Some((fov, vision, pos, _)) = (&has_fov, &visions, &has_pos, &is_player).iter().take(1).next() {
-        let ast = {
-            let mut cache = AST_LRU.lock().unwrap();
-            if !cache.contains(&"render_player_field_of_view_ast") {
-                let perception_code = vec_u8_to_str(data.0.get(vision.0.as_str()).expect("Perception unknown"));
-                let ast = scripting.0.compile(perception_code.as_str());
-                match ast {
-                    Ok(ast) => {
-                        cache.put("render_player_field_of_view_ast", ast.clone());
-                        Ok(ast)
-                    },
+    if let Some((fov, _)) = (&has_fov, &is_player).iter().take(1).next() {
+        batch.0.target(MAP_CONSOLE_LAYER);
+        for pt in &fov.0 {
+            if let Some(tile_index) = map.get_tile_index_from_point(*pt) {
+                let glyph = match map.tiles[tile_index] {
+                    MapTile::Obscured => '#',
+                    MapTile::Corridor | MapTile::Floor(_) => '.',
+                    MapTile::Door => '+',
+                    _ => ' '
+                };
 
-                    Err(err) => {
-                        log.write(format!("{:?}", err));
-                        Err(err)
-                    }
-                }
-            } else {
-                Ok(cache.get(&"render_player_field_of_view_ast").unwrap().clone())
-            }
-        };
-
-        match ast {
-            Ok(ast) => {
-                let mut scope = Scope::new();
-                scope.push("player_pos", pos.0);
-                scope.push("player_fov", 8);
-
-                batch.0.target(MAP_CONSOLE_LAYER);
-                for pt in &fov.0 {
-                    if let Some(tile_index) = map.get_tile_index_from_point(*pt) {
-                        let result: Result<Array, _> = scripting.0.call_fn(&mut scope, &ast, "perceive", (map.tiles[tile_index], *pt));
-                        match result {
-                            Ok(result) => {
-                                let ch = result[0].clone_cast::<char>() as u16;
-                                let fg = result[1].clone_cast::<RGB>();
-                                let bg = result[2].clone_cast::<RGB>();
-                                batch.0.set(*pt, ColorPair::new(fg, bg), ch);
-                            },
-
-                            Err(err) => {
-                                println!("{:?}", err);
-                            }
-                        }
-                    }
-                }
-            },
-
-            Err(err) => {
-                println!("{:?}", err);
+                batch.0.set(*pt, ColorPair::new(RGB::named(WHITE), RGB::named(BLACK)), glyph as u16);
             }
         }
     }

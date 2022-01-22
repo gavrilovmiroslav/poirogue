@@ -7,6 +7,7 @@ use bracket_lib::prelude::*;
 use object_pool::Reusable;
 use crate::commands::GameCommand;
 use crate::tiles::{MapTile, TileIndex};
+use crate::render_view::{RenderViewDefinition};
 use lru::{LruCache};
 use lazy_static::*;
 use std::sync::Mutex;
@@ -135,6 +136,64 @@ impl Map {
 }
 
 impl Map {
+    pub fn render(&self, ctx: &mut BTerm, view: &dyn RenderViewDefinition, store: &Store, player_position: Point, time: u64) {
+        let mut index: usize = 0;
+
+        let mut batch = DrawBatch::new();
+
+        if view.get_see_all() {
+            for y in 0 .. self.height {
+                for x in 0 .. self.width {
+                    let tile = &self.tiles[index];
+                    let glyph = view.get_glyph(tile);
+                    let color = if self.visible[index] { view.get_color(tile) } else { named_color(DARK_GREEN) };
+                    batch.print_color(Point::new(x, y), glyph, ColorPair::new(color, named_color(BLACK)));
+                    index += 1;
+                }
+            }
+        } else {
+            let noise = store.0.get::<Vec<f32>>("noise_map").unwrap();
+            let (xp, yp) = (player_position.x, player_position.y);
+
+            for y in 0..self.height {
+                for x in 0..self.width {
+                    let tile = &self.tiles[index];
+
+                    if self.revealed[index] {
+                        let dist = ({
+                            let dx = (xp - x) as f32;
+                            let dy = (yp - y) as f32;
+                            dx * dx + dy * dy
+                        } / 100.0).clamp(0.0, 1.0) * 0.25;
+
+                        let time = (time as f32) * 0.01;
+
+                        let speed = 0.5 + noise[index];
+                        let norm = f32::sin(time * speed) + 1.0;                              // 0 .. 1
+                        let sin = (0.2 + norm * 0.2).clamp(0.2, 0.3);                    // 0.2 .. 0.4
+
+                        batch.print_color(Point::new(x, y), view.get_glyph(tile),
+                                          ColorPair::new(if self.visible[index] {
+                                              view.get_color(tile)
+                                                  .hue_shift(f32::sin((time + noise[index]) * 0.01) + 1.0)
+                                                  .darken(dist * 1.5)
+                                                  .desaturate(-dist * 1.5)
+                                          } else {
+                                              view.get_color(tile)
+                                                  .darken(0.25)
+                                                  .darken(dist)
+                                                  .desaturate(-dist * 2.0)
+                                          }, named_color(BLACK)));
+                    }
+                    index += 1;
+                }
+            }
+        }
+
+        batch.submit(0).unwrap();
+        render_draw_buffer(ctx).unwrap();
+    }
+
     pub fn get_all_doors(&self) -> Vec<TileIndex> {
         self.tiles.iter().enumerate()
             .filter(|(_, &t)| t == MapTile::Door)
