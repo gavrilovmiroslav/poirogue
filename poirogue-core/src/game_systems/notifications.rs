@@ -7,7 +7,7 @@ use shipyard::{UniqueView, UniqueViewMut};
 use simple_ringbuf::RingBuffer;
 use crate::colors::named_color;
 use crate::entity::IsDirty;
-use crate::game_systems::{BumpIntent, CollectIntent, InvestigateIntent, UnlockIntent};
+use crate::game_systems::{BumpIntent, CollectIntent, UnlockIntent};
 use crate::UI_CONSOLE_LAYER;
 
 pub struct NotificationLog {

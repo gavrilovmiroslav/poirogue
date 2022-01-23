@@ -24,8 +24,6 @@ lazy_static! {
 pub struct Map {
     pub width: i32,
     pub height: i32,
-    pub visible: Vec<bool>,
-    pub revealed: Vec<bool>,
     pub tiles: Vec<MapTile>,
 }
 
@@ -73,28 +71,16 @@ impl Map {
     pub fn new(w: i32, h: i32) -> Self {
         let size = (w * h) as usize;
         let mut tiles = Vec::with_capacity(size);
-        let mut revealed = Vec::with_capacity(size);
-        let mut visible = Vec::with_capacity(size);
 
         for _ in 0..size {
             tiles.push(MapTile::default());
-            revealed.push(false);
-            visible.push(false);
         }
 
-        Map { width: w, height: h, tiles, revealed, visible }
+        Map { width: w, height: h, tiles, }
     }
 
     pub fn is_tile_blocked(&self, tile_index: TileIndex) -> bool {
         self.tiles[tile_index].is_blocking()
-    }
-
-    pub fn is_tile_revealed(&self, tile_index: TileIndex) -> bool {
-        self.revealed[tile_index]
-    }
-
-    pub fn is_tile_visible(&self, tile_index: TileIndex) -> bool {
-        self.visible[tile_index]
     }
 
     pub fn is_exit_valid(&self, x:i32, y:i32) -> bool {
@@ -103,95 +89,17 @@ impl Map {
         }
 
         let index = self.get_tile_index(x, y).unwrap();
-        !self.is_tile_blocked(index) && self.is_tile_revealed(index)
+        !self.is_tile_blocked(index)
     }
 
     pub fn set_at_tile_index(&mut self, tile_index: TileIndex, t: MapTile) {
         self.tiles[tile_index] = t.clone();
-        self.revealed[tile_index] = false;
-        self.visible[tile_index] = false;
     }
 
     pub fn set(&mut self, x: i32, y: i32, t: MapTile) {
         if let Some(index) = self.get_tile_index(x, y) {
             self.tiles[index] = t.clone();
-            self.revealed[index] = false;
-            self.visible[index] = false;
         }
-    }
-
-    pub fn hide(&mut self) {
-        for i in self.visible.iter_mut() {
-            *i = false;
-        }
-    }
-
-    pub fn show(&mut self, vis: &[Point]) {
-        for p in vis {
-            let index = self.point2d_to_index(*p);
-            self.visible[index] = true;
-            self.revealed[index] = true;
-        }
-    }
-}
-
-impl Map {
-    pub fn render(&self, ctx: &mut BTerm, view: &dyn RenderViewDefinition, store: &Store, player_position: Point, time: u64) {
-        let mut index: usize = 0;
-
-        let mut batch = DrawBatch::new();
-
-        if view.get_see_all() {
-            for y in 0 .. self.height {
-                for x in 0 .. self.width {
-                    let tile = &self.tiles[index];
-                    let glyph = view.get_glyph(tile);
-                    let color = if self.visible[index] { view.get_color(tile) } else { named_color(DARK_GREEN) };
-                    batch.print_color(Point::new(x, y), glyph, ColorPair::new(color, named_color(BLACK)));
-                    index += 1;
-                }
-            }
-        } else {
-            let noise = store.0.get::<Vec<f32>>("noise_map").unwrap();
-            let (xp, yp) = (player_position.x, player_position.y);
-
-            for y in 0..self.height {
-                for x in 0..self.width {
-                    let tile = &self.tiles[index];
-
-                    if self.revealed[index] {
-                        let dist = ({
-                            let dx = (xp - x) as f32;
-                            let dy = (yp - y) as f32;
-                            dx * dx + dy * dy
-                        } / 100.0).clamp(0.0, 1.0) * 0.25;
-
-                        let time = (time as f32) * 0.01;
-
-                        let speed = 0.5 + noise[index];
-                        let norm = f32::sin(time * speed) + 1.0;                              // 0 .. 1
-                        let sin = (0.2 + norm * 0.2).clamp(0.2, 0.3);                    // 0.2 .. 0.4
-
-                        batch.print_color(Point::new(x, y), view.get_glyph(tile),
-                                          ColorPair::new(if self.visible[index] {
-                                              view.get_color(tile)
-                                                  .hue_shift(f32::sin((time + noise[index]) * 0.01) + 1.0)
-                                                  .darken(dist * 1.5)
-                                                  .desaturate(-dist * 1.5)
-                                          } else {
-                                              view.get_color(tile)
-                                                  .darken(0.25)
-                                                  .darken(dist)
-                                                  .desaturate(-dist * 2.0)
-                                          }, named_color(BLACK)));
-                    }
-                    index += 1;
-                }
-            }
-        }
-
-        batch.submit(0).unwrap();
-        render_draw_buffer(ctx).unwrap();
     }
 
     pub fn get_all_doors(&self) -> Vec<TileIndex> {

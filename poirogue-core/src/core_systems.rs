@@ -10,21 +10,19 @@ use serde::ser::{Error, SerializeStruct};
 use crate::colors::named_color;
 use crate::commands::{FlowCommand, GameCommand, HackCommand};
 use crate::entity::*;
-use crate::game::{Batch, FlagExit, Store, WindowSize};
+use crate::game::{Batch, FlagAnimationDone, FlagExit, Store, Timeline, WindowSize};
 use crate::input::{InputSnapshot, InputSnapshots, KeyboardSnapshot, MouseSnapshot};
 use crate::map::Map;
 use crate::game_systems::directives::MoveDirective;
-use crate::game_systems::{CollectIntent, InvestigateIntent, IsDoor, IsItem, IsLocked};
+use crate::game_systems::{CollectIntent, Intent, IsItem};
 use crate::game_systems::intents::{BumpIntent, UnlockIntent};
 use crate::glyph::Glyph;
 use crate::{MAP_CONSOLE_LAYER, UI_CONSOLE_LAYER};
+use crate::game_systems::PlannedIntent::{Bump, Collect, Unlock};
 use crate::map_gen::run_map_gen;
 use crate::rand_gen::{get_random_from, get_random_sub};
 use crate::render_view::RenderView;
 use crate::tiles::{MapTile, TileIndex};
-
-pub struct IsCharacter;
-pub struct HasSight(u8);
 
 pub fn on_command_generate_level(mut storages: AllStoragesViewMut,) {
     use GameCommand::*;
@@ -47,8 +45,11 @@ pub fn on_command_generate_level(mut storages: AllStoragesViewMut,) {
 
             for door in all_doors {
                 let pos = new_map.index_to_point2d(door);
-                let mut door_entity = storages.add_entity(
-                    (IsDoor(true), HasPosition(pos), HasGlyph(Glyph::new('+'))));
+                let mut door_entity = storages.add_entity((
+                    IsDoor{ is_closed: true, is_locked: None },
+                    HasPosition(pos),
+                    HasGlyph(Glyph::new('+')))
+                );
 
                 if some_doors.contains(&door) {
                     let pt = get_random_from(&storage.rects).center();
@@ -59,7 +60,8 @@ pub fn on_command_generate_level(mut storages: AllStoragesViewMut,) {
                          HasGlyph(Glyph::new('(')),
                         ));
 
-                    storages.add_component(door_entity, (IsLocked { key: key_entity }, ));
+                    (&mut storages.borrow::<ViewMut<IsDoor>>().unwrap()).get(door_entity)
+                        .map(|mut door| door.is_locked = Some(key_entity));
                 }
             }
 
@@ -70,7 +72,8 @@ pub fn on_command_generate_level(mut storages: AllStoragesViewMut,) {
                  IsCharacter,
                  HasPosition(starting_pos),
                  HasGlyph(Glyph::new('@')),
-                 HasFieldOfView(Vec::new()), ));
+                 HasSight{ sight_distance: 8, field_of_view: HashSet::new() }),
+            );
 
             { *storages.borrow::<UniqueViewMut<Map>>().expect("Map") = new_map; }
         }
@@ -84,31 +87,10 @@ pub fn update_time(mut time: UniqueViewMut<Time>,) {
     time.0 += 1;
 }
 
-pub fn update_fields_of_view(map: UniqueView<Map>,
-                             positions: View<HasPosition>,
-                             sights: View<HasSight>,
-                             mut fovs: ViewMut<HasFieldOfView>,) {
-
-    for (id, (pos, mut fov)) in (&positions, &mut fovs).iter().with_id() {
-        let sight = (&sights).get(id).unwrap_or(&HasSight(8));
-        fov.0 = field_of_view_set(pos.0, sight.0 as i32, &*map).into_iter().collect()
-    }
-}
-
-pub fn update_player_vision(mut map: UniqueViewMut<Map>,
-                            is_player: View<IsPlayer>,
-                            fovs: View<HasFieldOfView>, ) {
-
-    for (_, fov) in (&is_player, &fovs).iter() {
-        map.hide();
-        map.show(&fov.0);
-    }
-}
-
 pub fn interpret_player_input_as_bump_intent(keyboard: UniqueView<KeyboardSnapshot>,
                                              is_player: View<IsPlayer>,
                                              mut positions: ViewMut<HasPosition>,
-                                             mut bump_intents: UniqueViewMut<VecDeque<BumpIntent>>,
+                                             mut timeline: UniqueViewMut<Timeline>,
                                              mut time: UniqueView<Time>, ) {
 
     for (id, (_, mut has_pos)) in (&is_player, &mut positions).iter().with_id() {
@@ -126,7 +108,24 @@ pub fn interpret_player_input_as_bump_intent(keyboard: UniqueView<KeyboardSnapsh
         if keyboard.is_pressed(VirtualKeyCode::C) { new_pos.x += 1; new_pos.y += 1; }
 
         if *pos != new_pos {
-            bump_intents.push_back(BumpIntent { id: time.0, bumper: id, pos: new_pos });
+            timeline.add(Intent{ speed: 100, plan: Bump(BumpIntent { id: time.0, bumper: id, pos: new_pos })});
+        }
+    }
+}
+
+pub fn push_next_event_from_timeline(mut timeline: UniqueViewMut<Timeline>,
+                                     mut animation_done: UniqueViewMut<FlagAnimationDone>,
+                                     mut bump_intents: UniqueViewMut<VecDeque<BumpIntent>>,
+                                     mut unlock_intents: UniqueViewMut<VecDeque<UnlockIntent>>,
+                                     mut collect_intents: UniqueViewMut<VecDeque<CollectIntent>>,) {
+
+    if animation_done.0 {
+        if let Some(event) = timeline.next() {
+            match event.plan {
+                Bump(bump_intent) => bump_intents.push_back(bump_intent),
+                Unlock(unlock_intent) => unlock_intents.push_back(unlock_intent),
+                Collect(collect_intent) => collect_intents.push_back(collect_intent),
+            }
         }
     }
 }
@@ -140,14 +139,26 @@ pub fn update_player_position(is_player: View<IsPlayer>,
     }
 }
 
+pub fn update_fields_of_view(mut positions: ViewMut<HasPosition>,
+                             mut sights: ViewMut<HasSight>,
+                             mut dirty: UniqueViewMut<IsDirty>,
+                             map: UniqueView<Map>) {
+
+    if dirty.0 {
+        for (pos, mut sight) in (&positions, &mut sights).iter() {
+            sight.field_of_view = field_of_view_set(pos.0, sight.sight_distance as i32, &*map);
+        }
+    }
+}
+
 pub fn render_player_field_of_view(mut batch: UniqueViewMut<Batch>,
                                    mut map: UniqueViewMut<Map>,
-                                   has_fov: View<HasFieldOfView>,
+                                   has_sight: View<HasSight>,
                                    is_player: View<IsPlayer>,) {
 
-    if let Some((fov, _)) = (&has_fov, &is_player).iter().take(1).next() {
+    if let Some((sight, _)) = (&has_sight, &is_player).iter().take(1).next() {
         batch.0.target(MAP_CONSOLE_LAYER);
-        for pt in &fov.0 {
+        for pt in &sight.field_of_view {
             if let Some(tile_index) = map.get_tile_index_from_point(*pt) {
                 let glyph = match map.tiles[tile_index] {
                     MapTile::Obscured => '#',
@@ -156,7 +167,7 @@ pub fn render_player_field_of_view(mut batch: UniqueViewMut<Batch>,
                     _ => ' '
                 };
 
-                batch.0.set(*pt, ColorPair::new(RGB::named(WHITE), RGB::named(BLACK)), glyph as u16);
+                batch.0.set(*pt, ColorPair::new(RGB::from((140, 90, 90)), RGB::named(BLACK)), glyph as u16);
             }
         }
     }
@@ -164,26 +175,26 @@ pub fn render_player_field_of_view(mut batch: UniqueViewMut<Batch>,
 
 pub fn render_player_visible_characters(mut batch: UniqueViewMut<Batch>,
                                         is_player: View<IsPlayer>,
-                                        has_fov: View<HasFieldOfView>,
+                                        has_sight: View<HasSight>,
                                         character: View<IsCharacter>,
                                         positions: View<HasPosition>,
-                                        glyphs: View<HasGlyph>,
-                                        invisible: View<IsInvisible>,) {
+                                        glyphs: View<HasGlyph>,) {
 
-    if let Some((fov, _)) = (&has_fov, &is_player).iter().take(1).next() {
+    if let Some((sight, _)) = (&has_sight, &is_player).iter().take(1).next() {
         batch.0.target(MAP_CONSOLE_LAYER);
-        for (_, has_pos, has_glyph, _) in (&character, &positions, &glyphs, !&invisible).iter() {
+        for (_, has_pos, has_glyph,) in (&character, &positions, &glyphs,).iter() {
             let glyph = has_glyph.0;
             let pos = has_pos.0;
-            if fov.0.contains(&pos) {
+            if sight.field_of_view.contains(&pos) {
                 batch.0.set(pos, ColorPair::new(glyph.fg, glyph.bg), glyph.ch as u16);
             }
         }
     }
 }
 
-pub fn clean_dirty(mut dirty: UniqueViewMut<IsDirty>) {
+pub fn clean_dirty(mut dirty: UniqueViewMut<IsDirty>, mut anim: UniqueViewMut<FlagAnimationDone>) {
     dirty.0 = false;
+    anim.0 = true;
 }
 
 pub fn submit_draw_batching(ctx: &mut BTerm,

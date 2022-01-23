@@ -5,8 +5,7 @@ use bracket_color::prelude::{BLACK, ColorPair, DARK_GRAY};
 use bracket_lib::prelude::{Point, Algorithm2D, BTerm};
 use shipyard::{AddEntity, AllStoragesViewMut, EntitiesViewMut, EntityId, Get, IntoIter, IntoWithId, Not, Remove, SparseSet, Storage, UniqueView, UniqueViewMut, View, ViewMut};
 use crate::colors::{ColorShifter, named_color};
-use crate::core_systems::IsCharacter;
-use crate::entity::{HasFieldOfView, HasGlyph, HasPosition, IsDirty, IsInvisible, IsPlayer};
+use crate::entity::{HasSight, HasGlyph, HasPosition, IsDirty, IsPlayer};
 use crate::game::{Batch, Store};
 use crate::game_systems::{BumpIntent, CollectIntent, MoveDirective, NotificationLog, ResolvedIntents};
 use crate::map::Map;
@@ -29,14 +28,14 @@ pub fn render_items(mut batch: UniqueViewMut<Batch>,
                     has_position: View<HasPosition>,
                     has_glyph: View<HasGlyph>,
                     is_item: View<IsItem>,
-                    has_fov: View<HasFieldOfView>,
+                    has_sight: View<HasSight>,
                     is_player: View<IsPlayer>,) {
 
-    if let Some((fov, _)) = (&has_fov, &is_player).iter().take(1).next() {
+    if let Some((sight, _)) = (&has_sight, &is_player).iter().take(1).next() {
         batch.0.target(MAP_CONSOLE_LAYER);
 
         for (_, pos, glyph) in (&is_item, &has_position, &has_glyph).iter().filter(|i| !i.0.is_collected) {
-            let is_visible = fov.0.contains(&pos.0);
+            let is_visible = sight.field_of_view.contains(&pos.0);
             let fg = if is_visible { glyph.0.fg } else { named_color(DARK_GRAY).darken(0.5) };
 
             if is_visible {

@@ -15,6 +15,7 @@ use caves::{Cave, FileCave, MemoryCave};
 use object_pool::{Pool, Reusable};
 use lazy_static::*;
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
+use priority_queue::priority_queue::PriorityQueue;
 use serde::{de, Serialize};
 use shipyard::{AllStoragesViewMut, Storage, StorageMemoryUsage, UniqueView, UniqueViewMut, View, ViewMut, Workload, WorkloadBuilder, World};
 use shipyard::error::UniqueRemove::AllStorages;
@@ -28,8 +29,7 @@ use crate::map_gen::run_map_gen;
 use crate::murder_gen::generate_murder;
 use crate::{core_systems, DRAWING_CONSOLE_LAYER, MAP_CONSOLE_LAYER, rand_gen, UI_CONSOLE_LAYER};
 use crate::colors::named_color;
-use crate::core_systems::IsCharacter;
-use crate::entity::{HasFieldOfView, HasGlyph, HasPosition, IsDirty, IsPlayer, PlayerPosition, Time};
+use crate::entity::{HasSight, HasGlyph, HasPosition, IsDirty, IsPlayer, PlayerPosition, Time};
 use crate::glyph::Glyph;
 use crate::json::InternalJsonStorage;
 use crate::opt::Opt;
@@ -39,7 +39,7 @@ use crate::tiles::{MapTile, MapTileRep, TileIndex};
 use crate::render_view::{RenderViewDefinition};
 use crate::render_view::*;
 use crate::game_systems;
-use crate::game_systems::{BumpIntent, CollectIntent, InvestigateIntent, IsDoor, IsItem, IsLocked, Item, MoveDirective, NotificationLog, on_bump_interpret_as_investigate_intent, ResolvedIntents, UnlockDirective, UnlockIntent};
+use crate::game_systems::{BumpIntent, CollectIntent, Intent, IsItem, Item, MoveDirective, NotificationLog, NotifyDirective, ResolvedIntents, UnlockDirective, UnlockIntent};
 use crate::maybe::Maybe;
 
 #[derive(Copy, Clone)]
@@ -47,6 +47,9 @@ pub struct FlagDebug(pub bool);
 
 #[derive(Copy, Clone)]
 pub struct FlagExit(pub bool);
+
+#[derive(Copy, Clone)]
+pub struct FlagAnimationDone(pub bool);
 
 pub struct Store(pub(crate) PickleDb);
 pub struct MemoryUsageLog(pub(crate) PickleDb);
@@ -63,6 +66,18 @@ pub struct Game {
     pub args: Opt,
 }
 
+pub struct Timeline(PriorityQueue::<Intent, u8>);
+
+impl Timeline {
+    pub fn add(&mut self, intent: Intent) {
+        let speed = intent.speed;
+        self.0.push(intent, speed);
+    }
+
+    pub fn next(&mut self) -> Option<Intent> {
+        self.0.pop().map(|t| t.0)
+    }
+}
 
 impl Game {
     pub fn new(args: &Opt) -> Game {
@@ -150,6 +165,7 @@ impl Game {
 
         game.world.add_unique(FlagDebug(args.keep_memory_log)).expect("Added FlagDebug");
         game.world.add_unique(FlagExit(false)).expect("Added FlagExit");
+        game.world.add_unique(FlagAnimationDone(true)).expect("Added FlagAnimationDone");
         game.world.add_unique(WindowSize((width, height))).expect("Added WindowSize");
         game.world.add_unique(Map::new(width, height)).expect("Added Map");
         game.world.add_unique(GameFlow::Player).expect("Added GameFlow");
@@ -196,9 +212,10 @@ impl Game {
         game.world.add_unique(VecDeque::<BumpIntent>::new()).unwrap();
         game.world.add_unique(VecDeque::<UnlockIntent>::new()).unwrap();
         game.world.add_unique(VecDeque::<CollectIntent>::new()).unwrap();
-        game.world.add_unique(VecDeque::<InvestigateIntent>::new()).unwrap();
         game.world.add_unique(VecDeque::<MoveDirective>::new()).unwrap();
         game.world.add_unique(VecDeque::<UnlockDirective>::new()).unwrap();
+        game.world.add_unique(VecDeque::<NotifyDirective>::new()).unwrap();
+        game.world.add_unique(Timeline(PriorityQueue::new()));
 
         Workload::builder("input handlers")
             .with_system(&game_systems::on_input_keyboard_exit)
@@ -214,9 +231,8 @@ impl Game {
             .add_to_world(&game.world).unwrap();
 
         Workload::builder("dirty-only updates")
-            .with_system(&core_systems::update_player_position)
             .with_system(&core_systems::update_fields_of_view)
-            .with_system(&core_systems::update_player_vision)
+            .with_system(&core_systems::update_player_position)
             .add_to_world(&game.world).unwrap();
 
         Workload::builder("player input interpretations")
@@ -226,7 +242,6 @@ impl Game {
         Workload::builder("bump interpretations")
             .with_system(&game_systems::on_bump_interpret_as_collect_item_intent)
             .with_system(&game_systems::on_bump_interpret_as_door_unlock_intent)
-            .with_system(&game_systems::on_bump_interpret_as_investigate_intent)
             .add_to_world(&game.world).unwrap();
 
         Workload::builder("item actions")
@@ -235,13 +250,13 @@ impl Game {
 
         Workload::builder("door actions")
             .with_system(&game_systems::on_unlock_if_has_key_for_door)
-            .with_system(&game_systems::on_investigate_lock)
             .with_system(&game_systems::on_bump_open_doors)
             .add_to_world(&game.world).unwrap();
 
         Workload::builder("resolve directives")
             .with_system(&game_systems::resolve_unlock_directive)
             .with_system(&game_systems::resolve_move_directives)
+            .with_system(&game_systems::resolve_notify_if_entity_alive_directives)
             .add_to_world(&game.world).unwrap();
 
         Workload::builder("move actions")
@@ -250,6 +265,7 @@ impl Game {
 
         Workload::builder("game systems")
             .with_workload("player input interpretations")
+            .with_system(&core_systems::push_next_event_from_timeline)
             .with_workload("bump interpretations")
             .with_workload("item actions")
             .with_workload("door actions")
@@ -260,8 +276,6 @@ impl Game {
         Workload::builder("render game")
             .with_system(&core_systems::render_player_field_of_view)
             .with_system(&game_systems::render_doors)
-            .with_system(&game_systems::render_locked_doors)
-            .with_system(&game_systems::render_known_locked_doors)
             .with_system(&core_systems::render_player_visible_characters)
             .with_system(&game_systems::render_items)
             .add_to_world(&game.world).unwrap();

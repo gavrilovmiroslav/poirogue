@@ -11,9 +11,21 @@ impl HasPosition {
 }
 
 pub struct HasGlyph(pub Glyph);
-pub struct HasFieldOfView(pub Vec<Point>);
-pub struct IsInvisible;
+
+pub struct HasSight {
+    pub sight_distance: u8,
+    pub field_of_view: HashSet<Point>,
+}
+
 pub struct IsPlayer;
 pub struct PlayerPosition(pub Point);
 pub struct Time(pub(crate) u64);
 pub struct IsDirty(pub bool);
+
+pub struct IsKnown;
+pub struct IsCharacter;
+
+pub struct IsDoor {
+    pub is_closed: bool,
+    pub is_locked: Option<EntityId>,
+}
