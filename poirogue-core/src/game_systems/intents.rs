@@ -30,6 +30,12 @@ pub trait Identifiable {
 #[derive(Default)]
 pub struct ResolvedIntents(pub HashSet<u64>);
 
+impl ResolvedIntents {
+    pub fn not_handled(&self, i: impl Identifiable) -> bool {
+        !self.0.contains(&i.id())
+    }
+}
+
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]
 pub struct BumpIntent {
     pub id: u64,

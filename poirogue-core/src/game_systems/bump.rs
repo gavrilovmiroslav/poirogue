@@ -10,7 +10,7 @@ pub fn on_bump_move_if_empty(map: UniqueView<Map>,
                              mut move_directives: UniqueViewMut<VecDeque<MoveDirective>>,
                              mut handled: UniqueViewMut<ResolvedIntents>) {
 
-    for bump in bump_intents.iter().filter(|i| !handled.0.contains(&i.id)) {
+    for bump in bump_intents.iter().filter(|&&i| handled.not_handled(i)) {
         let tile = map.point2d_to_index(bump.pos);
 
         if !map.is_tile_blocked(tile) {

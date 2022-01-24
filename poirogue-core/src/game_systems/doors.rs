@@ -59,7 +59,7 @@ pub fn on_bump_open_doors(mut map: UniqueViewMut<Map>,
                           mut handled: UniqueViewMut<ResolvedIntents>) {
 
     let mut resolved = Vec::new();
-    for bump in bump_intents.iter().filter(|i| !handled.0.contains(&i.id)) {
+    for bump in bump_intents.iter().filter(|&&i| handled.not_handled(i)) {
         for (mut door, mut glyph, pos) in (&mut doors, &mut has_glyph, &has_position).iter().filter(|(d, _, p)| d.is_closed) {
             if pos.0 != bump.pos { continue; }
             if door.is_locked.is_some() { continue; }
@@ -88,7 +88,7 @@ pub fn on_unlock_if_has_key_for_door(items: View<IsItem>,
                                      mut handled: UniqueViewMut<ResolvedIntents>) {
 
     let mut resolved = Vec::new();
-    for unlock in unlock_intents.iter().filter(|i| !handled.0.contains(&i.id)) {
+    for unlock in unlock_intents.iter().filter(|&&i| handled.not_handled(i)) {
         let target_id = unlock.target;
         let owner_id = unlock.entity;
 

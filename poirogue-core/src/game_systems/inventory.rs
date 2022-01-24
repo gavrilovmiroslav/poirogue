@@ -51,7 +51,7 @@ pub fn on_bump_interpret_as_collect_item_intent(items: View<IsItem>,
                                                 mut collect_intents: UniqueViewMut<VecDeque<CollectIntent>>,
                                                 mut handled: UniqueViewMut<ResolvedIntents>) {
 
-    for bump in bump_intents.iter().filter(|i| !handled.0.contains(&i.id)) {
+    for bump in bump_intents.iter().filter(|&&i| handled.not_handled(i)) {
         for (item_id, (_, pos)) in (&items, &has_position).iter().with_id()
             .filter(|(_, (i, _))| !i.is_collected) {
 
@@ -73,7 +73,7 @@ pub fn on_collect_if_possible(mut items: ViewMut<IsItem>,
                               mut handled: UniqueViewMut<ResolvedIntents>) {
 
     let mut resolved = Vec::new();
-    for collect in collect_intents.iter().filter(|i| !handled.0.contains(&i.id)) {
+    for collect in collect_intents.iter().filter(|&&i| handled.not_handled(i)) {
         if let Ok(mut item) = (&mut items).get(collect.item)
         {
             has_position.remove(collect.item);
