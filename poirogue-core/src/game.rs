@@ -237,10 +237,11 @@ impl Game {
 
         Workload::builder("player input interpretations")
             .with_system(&core_systems::interpret_player_input_as_bump_intent)
+            .with_system(&core_systems::interpret_player_input_as_pickup)
             .add_to_world(&game.world).unwrap();
 
         Workload::builder("bump interpretations")
-            .with_system(&game_systems::on_bump_interpret_as_collect_item_intent)
+//            .with_system(&game_systems::on_bump_interpret_as_collect_item_intent)
             .with_system(&game_systems::on_bump_interpret_as_door_unlock_intent)
             .add_to_world(&game.world).unwrap();
 
@@ -276,8 +277,8 @@ impl Game {
         Workload::builder("render game")
             .with_system(&core_systems::render_player_field_of_view)
             .with_system(&game_systems::render_doors)
-            .with_system(&core_systems::render_player_visible_characters)
             .with_system(&game_systems::render_items)
+            .with_system(&core_systems::render_player_visible_characters)
             .add_to_world(&game.world).unwrap();
 
         main_loop(term, game).unwrap();

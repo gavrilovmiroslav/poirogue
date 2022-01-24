@@ -113,6 +113,22 @@ pub fn interpret_player_input_as_bump_intent(keyboard: UniqueView<KeyboardSnapsh
     }
 }
 
+pub fn interpret_player_input_as_pickup(keyboard: UniqueView<KeyboardSnapshot>,
+                                        is_player: View<IsPlayer>,
+                                        items: View<IsItem>,
+                                        mut positions: ViewMut<HasPosition>,
+                                        mut timeline: UniqueViewMut<Timeline>,
+                                        mut time: UniqueView<Time>, ) {
+
+    if keyboard.is_pressed(VirtualKeyCode::Comma) {
+        let (player_id, (_, player_pos)) = (&is_player, &positions).iter().with_id().take(1).next().unwrap();
+
+        for (item_id, _) in (&items, &positions).iter().with_id().filter(|(_, (item, pos))| pos.0 == player_pos.0) {
+            timeline.add(Intent { speed: 100, plan: Collect(CollectIntent { id: time.0, item: item_id, collector: player_id }) });
+        }
+    }
+}
+
 pub fn push_next_event_from_timeline(mut timeline: UniqueViewMut<Timeline>,
                                      mut animation_done: UniqueViewMut<FlagAnimationDone>,
                                      mut bump_intents: UniqueViewMut<VecDeque<BumpIntent>>,
