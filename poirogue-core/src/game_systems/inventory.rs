@@ -2,12 +2,14 @@ use std::borrow::BorrowMut;
 use std::collections::{HashSet, VecDeque};
 use std::ops::Index;
 use bracket_color::prelude::{BLACK, ColorPair, DARK_GRAY};
-use bracket_lib::prelude::{Point, Algorithm2D, BTerm};
+use bracket_lib::prelude::{Point, Algorithm2D, BTerm, VirtualKeyCode, Rect, WHITE, GRAY};
 use shipyard::{AddEntity, AllStoragesViewMut, EntitiesViewMut, EntityId, Get, IntoIter, IntoWithId, Not, Remove, SparseSet, Storage, UniqueView, UniqueViewMut, View, ViewMut};
 use crate::colors::{ColorShifter, named_color};
+use crate::commands::GameplayContext;
 use crate::entity::{HasSight, HasGlyph, HasPosition, IsDirty, IsPlayer};
 use crate::game::{Batch, Store};
 use crate::game_systems::{BumpIntent, CollectIntent, MoveDirective, NotificationLog, ResolvedIntents};
+use crate::input::{InputSnapshot, KeyboardSnapshot};
 use crate::map::Map;
 use crate::MAP_CONSOLE_LAYER;
 use crate::tiles::{MapTile, TileIndex};
@@ -90,4 +92,50 @@ pub fn on_collect_if_possible(mut items: ViewMut<IsItem>,
     }
 
     for id in resolved { handled.0.insert(id); }
+}
+
+
+pub fn interpret_player_input_as_inventory_access(mut keyboard: UniqueViewMut<KeyboardSnapshot>,
+                                                  mut dirty: UniqueViewMut<IsDirty>,
+                                                  mut context: UniqueViewMut<GameplayContext>,) {
+
+    match *context {
+        GameplayContext::MainGame => {
+            if keyboard.is_pressed(VirtualKeyCode::I) {
+                println!("In inventory!");
+                *context = GameplayContext::Inventory;
+                dirty.0 = true;
+            }
+        },
+        GameplayContext::Inventory => {
+            if keyboard.is_pressed(VirtualKeyCode::Escape) {
+                println!("Out of inventory!");
+                keyboard.consume(VirtualKeyCode::Escape);
+                *context = GameplayContext::MainGame;
+                dirty.0 = true;
+            }
+        }
+    }
+}
+
+pub fn render_inventory(mut batch: UniqueViewMut<Batch>,
+                        is_item: View<IsItem>,
+                        is_player: View<IsPlayer>,
+                        carries: View<CarriesItem>,
+                        context: UniqueView<GameplayContext>) {
+
+    if *context == GameplayContext::Inventory {
+        batch.0.target(MAP_CONSOLE_LAYER);
+        if let Some((player_id, _)) = (&is_player).iter().with_id().next() {
+            batch.0.draw_box(Rect::with_size(40, 2, 100, 40), ColorPair::new(named_color(BLACK), named_color(BLACK)));
+            batch.0.print(Point::new(45, 3), "= INVENTORY (ESC TO RETURN) =");
+
+            let mut line = 1;
+            for carry in (&carries).iter().filter(|c| c.owner == player_id) {
+                let entry = (&is_item).get(carry.item).unwrap();
+                batch.0.print(Point::new(41, line + 4), format!("{}) {}", line, entry.item.to_uppercase().as_str()));
+                line += 1;
+            }
+        }
+    }
 }

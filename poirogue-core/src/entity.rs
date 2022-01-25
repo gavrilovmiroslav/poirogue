@@ -12,6 +12,8 @@ impl HasPosition {
 
 pub struct HasGlyph(pub Glyph);
 
+pub struct HasSign(pub String);
+
 pub struct HasSight {
     pub sight_distance: u8,
     pub field_of_view: HashSet<Point>,
@@ -26,6 +28,7 @@ pub struct IsKnown;
 pub struct IsCharacter;
 
 pub struct IsDoor {
+    pub sign: String,
     pub is_closed: bool,
     pub is_locked: Option<EntityId>,
 }

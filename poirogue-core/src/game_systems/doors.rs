@@ -79,7 +79,7 @@ pub fn on_bump_open_doors(mut map: UniqueViewMut<Map>,
 }
 
 pub fn on_unlock_if_has_key_for_door(items: View<IsItem>,
-                                     carries: View<CarriesItem>,
+                                     mut carries: ViewMut<CarriesItem>,
                                      doors: ViewMut<IsDoor>,
                                      mut unlock_intents: UniqueViewMut<VecDeque<UnlockIntent>>,
                                      mut unlock_directives: UniqueViewMut<VecDeque<UnlockDirective>>,
@@ -87,32 +87,35 @@ pub fn on_unlock_if_has_key_for_door(items: View<IsItem>,
                                      mut log: UniqueViewMut<NotificationLog>,
                                      mut handled: UniqueViewMut<ResolvedIntents>) {
 
+    let mut destroy_key = None;
     let mut resolved = Vec::new();
     for unlock in unlock_intents.iter().filter(|&&i| handled.not_handled(i)) {
         let target_id = unlock.target;
         let owner_id = unlock.entity;
 
-        let mut unlocked = false;
-        for (door_id, door) in (&doors).iter().with_id()
-            .filter(|(id, _)| target_id == *id) {
+        if let Some((door_id, door)) = (&doors).iter().with_id()
+            .filter(|(id, _)| target_id == *id).next() {
 
             if let Some(key_id) = door.is_locked {
-                for _ in (&carries).iter()
-                    .filter(|c| c.owner == owner_id && c.item == key_id) {
+                if let Some((carry_id, _)) = (&carries).iter().with_id()
+                        .filter(|(id, c)| c.owner == owner_id && c.item == key_id).next() {
+
                     let key = (&items).get(key_id).unwrap();
-                    log.write(format!("You unlocked the door with {}", key.item));
+                    log.write(format!("You unlocked the door with the {}", key.item));
 
                     unlock_directives.push_back(UnlockDirective(door_id));
                     resolved.push(unlock.id);
-                    unlocked = true;
+                    destroy_key = Some(carry_id);
+                } else {
+                    notify_directives.push_back(notify_if_alive(unlock.id, format!("The door marked '{}' is locked.", door.sign).as_str()));
                 }
             }
-        }
-
-        if !unlocked {
-            notify_directives.push_back(notify_if_alive(unlock.id, "This door remains locked."));
         }
     }
 
     for id in resolved { handled.0.insert(id); }
+
+    if destroy_key.is_some() {
+        (&mut carries).remove(destroy_key.unwrap());
+    }
 }

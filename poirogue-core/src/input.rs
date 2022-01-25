@@ -9,6 +9,7 @@ pub struct InputSnapshotState {
     pub pressed: BitSet,
     pub held: BitSet,
     pub released: BitSet,
+    pub consumed: BitSet,
 }
 
 pub trait InputSnapshot {
@@ -23,14 +24,17 @@ pub trait InputSnapshot {
 
     fn is_held(&self, key: Self::Input) -> bool {
         self.get_snapshot().held.contains(Self::key_to_usize(&key))
+            && !self.get_snapshot().consumed.contains(Self::key_to_usize(&key))
     }
 
     fn is_pressed(&self, key: Self::Input) -> bool {
         self.get_snapshot().pressed.contains(Self::key_to_usize(&key))
+            && !self.get_snapshot().consumed.contains(Self::key_to_usize(&key))
     }
 
     fn is_released(&self, key: Self::Input) -> bool {
         self.get_snapshot().released.contains(Self::key_to_usize(&key))
+            && !self.get_snapshot().consumed.contains(Self::key_to_usize(&key))
     }
 
     fn is_pressed_or_held_with_mod(&self, key: Self::Input, mod_key: Self::Input) -> bool {
@@ -38,10 +42,16 @@ pub trait InputSnapshot {
         self.is_pressed(key) || (self.is_held(mod_key) && self.is_held(key_clone))
     }
 
+    fn consume(&mut self, key: Self::Input) {
+        let input = Self::key_to_usize(&key);
+        self.get_snapshot_mut().consumed.insert(input);
+    }
+
     fn update(&mut self, input: &Input) {
         let snapshot = self.get_snapshot_mut();
         snapshot.pressed.clear();
         snapshot.released.clear();
+        snapshot.consumed.clear();
 
         let current_press = Self::get_input_set(input);
 

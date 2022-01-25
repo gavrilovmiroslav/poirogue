@@ -23,7 +23,7 @@ use simple_ringbuf::RingBuffer;
 
 use crate::map::Map;
 use crate::readonly_archive_cave::ReadonlyArchiveCave;
-use crate::commands::{ActionCommand, FlowCommand, GameCommand, GameFlow, HackCommand};
+use crate::commands::{ActionCommand, FlowCommand, GameCommand, GameplayContext, HackCommand};
 use crate::input::{InputSnapshotState, InputSnapshot, KeyboardSnapshot, InputSnapshots, MouseSnapshot};
 use crate::map_gen::run_map_gen;
 use crate::murder_gen::generate_murder;
@@ -168,7 +168,7 @@ impl Game {
         game.world.add_unique(FlagAnimationDone(true)).expect("Added FlagAnimationDone");
         game.world.add_unique(WindowSize((width, height))).expect("Added WindowSize");
         game.world.add_unique(Map::new(width, height)).expect("Added Map");
-        game.world.add_unique(GameFlow::Player).expect("Added GameFlow");
+        game.world.add_unique(GameplayContext::MainGame).expect("Added GameFlow");
 
         {
             let mut commands = VecDeque::<GameCommand>::new();
@@ -236,6 +236,7 @@ impl Game {
             .add_to_world(&game.world).unwrap();
 
         Workload::builder("player input interpretations")
+            .with_system(&game_systems::interpret_player_input_as_inventory_access)
             .with_system(&core_systems::interpret_player_input_as_bump_intent)
             .with_system(&core_systems::interpret_player_input_as_pickup)
             .add_to_world(&game.world).unwrap();
@@ -279,6 +280,7 @@ impl Game {
             .with_system(&game_systems::render_doors)
             .with_system(&game_systems::render_items)
             .with_system(&core_systems::render_player_visible_characters)
+            .with_system(&game_systems::render_inventory)
             .add_to_world(&game.world).unwrap();
 
         main_loop(term, game).unwrap();

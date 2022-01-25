@@ -8,7 +8,7 @@ use bracket_color::prelude::RGB;
 use serde::{Serialize, Deserialize, Serializer, Deserializer};
 use serde::ser::{Error, SerializeStruct};
 use crate::colors::named_color;
-use crate::commands::{FlowCommand, GameCommand, HackCommand};
+use crate::commands::{FlowCommand, GameCommand, GameplayContext, HackCommand};
 use crate::entity::*;
 use crate::game::{Batch, FlagAnimationDone, FlagExit, Store, Timeline, WindowSize};
 use crate::input::{InputSnapshot, InputSnapshots, KeyboardSnapshot, MouseSnapshot};
@@ -20,7 +20,7 @@ use crate::glyph::Glyph;
 use crate::{MAP_CONSOLE_LAYER, UI_CONSOLE_LAYER};
 use crate::game_systems::PlannedIntent::{Bump, Collect, Unlock};
 use crate::map_gen::run_map_gen;
-use crate::rand_gen::{get_random_from, get_random_sub};
+use crate::rand_gen::{get_random_between, get_random_from, get_random_sub};
 use crate::render_view::RenderView;
 use crate::tiles::{MapTile, TileIndex};
 
@@ -43,17 +43,35 @@ pub fn on_command_generate_level(mut storages: AllStoragesViewMut,) {
             let all_doors = new_map.get_all_doors().as_slice().to_vec();
             let some_doors: HashSet<TileIndex, RandomState> = HashSet::from_iter(get_random_sub(new_map.get_all_doors().as_slice(), 0.5));
 
+            fn obfuscate(s: &String) -> String {
+                let mut ss = s.to_uppercase().clone();
+
+                (0..s.len()).for_each(|index| {
+                    if ss.chars().nth(index).unwrap() != ' ' {
+                        if get_random_between(0, 100) < 10 {
+                            ss.replace_range(index..index + 1, "?");
+                        }
+                    }
+                });
+
+                ss
+            }
+
             for door in all_doors {
+                let door_name = mnumonic::encode_u32_joined(door as u32);
+                let obfuscated_door_name = obfuscate(&door_name);
+                let obfuscated_key_name = obfuscate(&door_name);
                 let pos = new_map.index_to_point2d(door);
                 let mut door_entity = storages.add_entity((
-                    IsDoor{ is_closed: true, is_locked: None },
+                    IsDoor{ sign: obfuscated_door_name, is_closed: true, is_locked: None },
                     HasPosition(pos),
-                    HasGlyph(Glyph::new('+')))
-                );
+                    HasGlyph(Glyph::new('+')),
+                ));
+
 
                 if some_doors.contains(&door) {
                     let pt = get_random_from(&storage.rects).center();
-                    let key = format!("Key for {}", door);
+                    let key = format!("key marked '{}'", obfuscated_key_name);
                     let key_entity = storages.add_entity(
                         (IsItem { item: key, is_collected: false },
                          HasPosition(pt),
@@ -91,7 +109,10 @@ pub fn interpret_player_input_as_bump_intent(keyboard: UniqueView<KeyboardSnapsh
                                              is_player: View<IsPlayer>,
                                              mut positions: ViewMut<HasPosition>,
                                              mut timeline: UniqueViewMut<Timeline>,
-                                             mut time: UniqueView<Time>, ) {
+                                             mut time: UniqueView<Time>,
+                                             mut context: UniqueViewMut<GameplayContext>,) {
+
+    if *context != GameplayContext::MainGame { return; }
 
     for (id, (_, mut has_pos)) in (&is_player, &mut positions).iter().with_id() {
         let pos = has_pos.get_mut();

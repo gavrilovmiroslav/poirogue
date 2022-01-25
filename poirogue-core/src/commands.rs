@@ -17,10 +17,10 @@ pub enum HackCommand {
     LockAllDoors
 }
 
-#[derive(PartialEq, Serialize, Deserialize, Debug)]
-pub enum GameFlow {
-    Player,
-    World,
+#[derive(PartialEq, Serialize, Deserialize, Debug, Eq)]
+pub enum GameplayContext {
+    MainGame,
+    Inventory,
 }
 
 #[derive(PartialEq, Serialize, Deserialize, Debug)]
