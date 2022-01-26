@@ -102,14 +102,12 @@ pub fn interpret_player_input_as_inventory_access(mut keyboard: UniqueViewMut<Ke
     match *context {
         GameplayContext::MainGame => {
             if keyboard.is_pressed(VirtualKeyCode::I) {
-                println!("In inventory!");
                 *context = GameplayContext::Inventory;
                 dirty.0 = true;
             }
         },
         GameplayContext::Inventory => {
             if keyboard.is_pressed(VirtualKeyCode::Escape) {
-                println!("Out of inventory!");
                 keyboard.consume(VirtualKeyCode::Escape);
                 *context = GameplayContext::MainGame;
                 dirty.0 = true;

@@ -15,9 +15,10 @@ use caves::{Cave, FileCave, MemoryCave};
 use object_pool::{Pool, Reusable};
 use lazy_static::*;
 use pickledb::{PickleDb, PickleDbDumpPolicy, SerializationMethod};
+use priority_queue::double_priority_queue::DoublePriorityQueue;
 use priority_queue::priority_queue::PriorityQueue;
 use serde::{de, Serialize};
-use shipyard::{AllStoragesViewMut, Storage, StorageMemoryUsage, UniqueView, UniqueViewMut, View, ViewMut, Workload, WorkloadBuilder, World};
+use shipyard::{AllStoragesViewMut, EntityId, Storage, StorageMemoryUsage, UniqueView, UniqueViewMut, View, ViewMut, Workload, WorkloadBuilder, World};
 use shipyard::error::UniqueRemove::AllStorages;
 use simple_ringbuf::RingBuffer;
 
@@ -66,16 +67,24 @@ pub struct Game {
     pub args: Opt,
 }
 
-pub struct Timeline(PriorityQueue::<Intent, u8>);
+pub struct TimeTracked;
+pub struct Timeline(DoublePriorityQueue::<EntityId, u32>);
 
 impl Timeline {
-    pub fn add(&mut self, intent: Intent) {
-        let speed = intent.speed;
-        self.0.push(intent, speed);
+    pub fn new() -> Timeline {
+        Timeline(DoublePriorityQueue::new())
     }
 
-    pub fn next(&mut self) -> Option<Intent> {
-        self.0.pop().map(|t| t.0)
+    pub fn add(&mut self, id: EntityId, dt: u32) {
+        self.0.push(id, dt);
+    }
+
+    pub fn next(&mut self) -> Option<EntityId> {
+        self.0.pop_min().map(|t| t.0)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 }
 
@@ -215,7 +224,7 @@ impl Game {
         game.world.add_unique(VecDeque::<MoveDirective>::new()).unwrap();
         game.world.add_unique(VecDeque::<UnlockDirective>::new()).unwrap();
         game.world.add_unique(VecDeque::<NotifyDirective>::new()).unwrap();
-        game.world.add_unique(Timeline(PriorityQueue::new()));
+        game.world.add_unique(Timeline::new());
 
         Workload::builder("input handlers")
             .with_system(&game_systems::on_input_keyboard_exit)
@@ -265,9 +274,7 @@ impl Game {
             .with_system(&game_systems::on_bump_move_if_empty)
             .add_to_world(&game.world).unwrap();
 
-        Workload::builder("game systems")
-            .with_workload("player input interpretations")
-            .with_system(&core_systems::push_next_event_from_timeline)
+        Workload::builder("automated game systems")
             .with_workload("bump interpretations")
             .with_workload("item actions")
             .with_workload("door actions")
@@ -335,7 +342,8 @@ impl GameState for Game {
 
         // cleanup
         self.world.run(&core_systems::clean_dirty).unwrap();
-        self.world.run_workload("game systems").unwrap();
+        self.world.run_workload("player input interpretations").unwrap();
+        self.world.run_workload("automated game systems").unwrap();
         self.world.run(&game_systems::delete_intents).unwrap();
 
         if self.world.borrow::<UniqueView<FlagExit>>().unwrap().0 {

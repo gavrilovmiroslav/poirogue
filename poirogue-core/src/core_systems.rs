@@ -10,7 +10,7 @@ use serde::ser::{Error, SerializeStruct};
 use crate::colors::named_color;
 use crate::commands::{FlowCommand, GameCommand, GameplayContext, HackCommand};
 use crate::entity::*;
-use crate::game::{Batch, FlagAnimationDone, FlagExit, Store, Timeline, WindowSize};
+use crate::game::{Batch, FlagAnimationDone, FlagExit, Store, TimeTracked, Timeline, WindowSize};
 use crate::input::{InputSnapshot, InputSnapshots, KeyboardSnapshot, MouseSnapshot};
 use crate::map::Map;
 use crate::game_systems::directives::MoveDirective;
@@ -88,6 +88,7 @@ pub fn on_command_generate_level(mut storages: AllStoragesViewMut,) {
             storages.add_entity(
                 (IsPlayer,
                  IsCharacter,
+                 TimeTracked,
                  HasPosition(starting_pos),
                  HasGlyph(Glyph::new('@')),
                  HasSight{ sight_distance: 8, field_of_view: HashSet::new() }),
@@ -101,16 +102,25 @@ pub fn on_command_generate_level(mut storages: AllStoragesViewMut,) {
     }
 }
 
-pub fn update_time(mut time: UniqueViewMut<Time>,) {
+pub fn update_time(mut time: UniqueViewMut<Time>,
+                   mut timeline: UniqueViewMut<Timeline>,
+                   timed: View<TimeTracked>) {
+
     time.0 += 1;
+
+    if timeline.is_empty() {
+        for (id, _) in (&timed).iter().with_id() {
+            timeline.add(id, 0);
+        }
+    }
 }
 
 pub fn interpret_player_input_as_bump_intent(keyboard: UniqueView<KeyboardSnapshot>,
                                              is_player: View<IsPlayer>,
                                              mut positions: ViewMut<HasPosition>,
-                                             mut timeline: UniqueViewMut<Timeline>,
                                              mut time: UniqueView<Time>,
-                                             mut context: UniqueViewMut<GameplayContext>,) {
+                                             mut context: UniqueViewMut<GameplayContext>,
+                                             mut bumps: UniqueViewMut<VecDeque<BumpIntent>>, ) {
 
     if *context != GameplayContext::MainGame { return; }
 
@@ -129,7 +139,7 @@ pub fn interpret_player_input_as_bump_intent(keyboard: UniqueView<KeyboardSnapsh
         if keyboard.is_pressed(VirtualKeyCode::C) { new_pos.x += 1; new_pos.y += 1; }
 
         if *pos != new_pos {
-            timeline.add(Intent{ speed: 100, plan: Bump(BumpIntent { id: time.0, bumper: id, pos: new_pos })});
+            bumps.push_back(BumpIntent { id: time.0, bumper: id, pos: new_pos });
         }
     }
 }
@@ -138,31 +148,14 @@ pub fn interpret_player_input_as_pickup(keyboard: UniqueView<KeyboardSnapshot>,
                                         is_player: View<IsPlayer>,
                                         items: View<IsItem>,
                                         mut positions: ViewMut<HasPosition>,
-                                        mut timeline: UniqueViewMut<Timeline>,
+                                        mut collects: UniqueViewMut<VecDeque<CollectIntent>>,
                                         mut time: UniqueView<Time>, ) {
 
     if keyboard.is_pressed(VirtualKeyCode::Comma) {
         let (player_id, (_, player_pos)) = (&is_player, &positions).iter().with_id().take(1).next().unwrap();
 
         for (item_id, _) in (&items, &positions).iter().with_id().filter(|(_, (item, pos))| pos.0 == player_pos.0) {
-            timeline.add(Intent { speed: 100, plan: Collect(CollectIntent { id: time.0, item: item_id, collector: player_id }) });
-        }
-    }
-}
-
-pub fn push_next_event_from_timeline(mut timeline: UniqueViewMut<Timeline>,
-                                     mut animation_done: UniqueViewMut<FlagAnimationDone>,
-                                     mut bump_intents: UniqueViewMut<VecDeque<BumpIntent>>,
-                                     mut unlock_intents: UniqueViewMut<VecDeque<UnlockIntent>>,
-                                     mut collect_intents: UniqueViewMut<VecDeque<CollectIntent>>,) {
-
-    if animation_done.0 {
-        if let Some(event) = timeline.next() {
-            match event.plan {
-                Bump(bump_intent) => bump_intents.push_back(bump_intent),
-                Unlock(unlock_intent) => unlock_intents.push_back(unlock_intent),
-                Collect(collect_intent) => collect_intents.push_back(collect_intent),
-            }
+            collects.push_back(CollectIntent { id: time.0, item: item_id, collector: player_id });
         }
     }
 }
