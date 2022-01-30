@@ -19,8 +19,11 @@ pub struct HasSight {
     pub field_of_view: HashSet<Point>,
 }
 
-pub struct IsPlayer;
-pub struct PlayerPosition(pub Point);
+pub struct Player {
+    pub entity: Option<EntityId>,
+    pub cached_position: Point,
+}
+
 pub struct Time(pub(crate) u64);
 pub struct IsDirty(pub bool);
 

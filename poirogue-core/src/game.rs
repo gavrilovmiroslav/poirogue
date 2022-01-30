@@ -30,7 +30,7 @@ use crate::map_gen::run_map_gen;
 use crate::murder_gen::generate_murder;
 use crate::{core_systems, DRAWING_CONSOLE_LAYER, MAP_CONSOLE_LAYER, rand_gen, UI_CONSOLE_LAYER};
 use crate::colors::named_color;
-use crate::entity::{HasSight, HasGlyph, HasPosition, IsDirty, IsPlayer, PlayerPosition, Time};
+use crate::entity::{HasSight, HasGlyph, HasPosition, IsDirty, Player, Time};
 use crate::glyph::Glyph;
 use crate::json::InternalJsonStorage;
 use crate::opt::Opt;
@@ -178,6 +178,7 @@ impl Game {
         game.world.add_unique(WindowSize((width, height))).expect("Added WindowSize");
         game.world.add_unique(Map::new(width, height)).expect("Added Map");
         game.world.add_unique(GameplayContext::MainGame).expect("Added GameFlow");
+        game.world.add_unique(Player{ entity: None, cached_position: Point::new(0, 0) }).expect("Added Player");
 
         {
             let mut commands = VecDeque::<GameCommand>::new();
@@ -214,7 +215,6 @@ impl Game {
         game.world.add_unique(Batch(DrawBatch::new())).unwrap();
         game.world.add_unique(Time(0u64)).unwrap();
         game.world.add_unique(IsDirty(true)).unwrap();
-        game.world.add_unique(PlayerPosition(Point::new(0, 0))).unwrap();
         game.world.add_unique(NotificationLog::new(args.log_height, args.log_expiry)).unwrap();
 
         game.world.add_unique(ResolvedIntents::default()).unwrap();

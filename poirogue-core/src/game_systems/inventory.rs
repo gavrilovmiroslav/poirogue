@@ -6,7 +6,7 @@ use bracket_lib::prelude::{Point, Algorithm2D, BTerm, VirtualKeyCode, Rect, WHIT
 use shipyard::{AddEntity, AllStoragesViewMut, EntitiesViewMut, EntityId, Get, IntoIter, IntoWithId, Not, Remove, SparseSet, Storage, UniqueView, UniqueViewMut, View, ViewMut};
 use crate::colors::{ColorShifter, named_color};
 use crate::commands::GameplayContext;
-use crate::entity::{HasSight, HasGlyph, HasPosition, IsDirty, IsPlayer};
+use crate::entity::{HasSight, HasGlyph, HasPosition, IsDirty, Player};
 use crate::game::{Batch, Store};
 use crate::game_systems::{BumpIntent, CollectIntent, MoveDirective, NotificationLog, ResolvedIntents};
 use crate::input::{InputSnapshot, KeyboardSnapshot};
@@ -31,17 +31,19 @@ pub fn render_items(mut batch: UniqueViewMut<Batch>,
                     has_glyph: View<HasGlyph>,
                     is_item: View<IsItem>,
                     has_sight: View<HasSight>,
-                    is_player: View<IsPlayer>,) {
+                    player: UniqueView<Player>,) {
 
-    if let Some((sight, _)) = (&has_sight, &is_player).iter().take(1).next() {
-        batch.0.target(MAP_CONSOLE_LAYER);
+    if let Some(entity) = player.entity {
+        if let Ok((sight,)) = (&has_sight,).get(entity) {
+            batch.0.target(MAP_CONSOLE_LAYER);
 
-        for (_, pos, glyph) in (&is_item, &has_position, &has_glyph).iter().filter(|i| !i.0.is_collected) {
-            let is_visible = sight.field_of_view.contains(&pos.0);
-            let fg = if is_visible { glyph.0.fg } else { named_color(DARK_GRAY).darken(0.5) };
+            for (_, pos, glyph) in (&is_item, &has_position, &has_glyph).iter().filter(|i| !i.0.is_collected) {
+                let is_visible = sight.field_of_view.contains(&pos.0);
+                let fg = if is_visible { glyph.0.fg } else { named_color(DARK_GRAY).darken(0.5) };
 
-            if is_visible {
-                batch.0.set(pos.0, ColorPair::new(fg, named_color(BLACK)), glyph.0.ch as u16);
+                if is_visible {
+                    batch.0.set(pos.0, ColorPair::new(fg, named_color(BLACK)), glyph.0.ch as u16);
+                }
             }
         }
     }
@@ -118,7 +120,7 @@ pub fn interpret_player_input_as_inventory_access(mut keyboard: UniqueViewMut<Ke
 
 pub fn render_inventory(mut batch: UniqueViewMut<Batch>,
                         is_item: View<IsItem>,
-                        is_player: View<IsPlayer>,
+                        is_player: View<Player>,
                         carries: View<CarriesItem>,
                         context: UniqueView<GameplayContext>) {
 

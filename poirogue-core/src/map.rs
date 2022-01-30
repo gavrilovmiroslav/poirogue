@@ -12,7 +12,6 @@ use lru::{LruCache};
 use lazy_static::*;
 use std::sync::Mutex;
 use crate::colors::{Color, named_color, ColorShifter};
-use crate::entity::PlayerPosition;
 use crate::game::Store;
 use crate::rand_gen::get_random_between;
 

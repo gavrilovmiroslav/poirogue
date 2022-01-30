@@ -3,7 +3,7 @@ use bracket_color::prelude::{ColorPair, HSV};
 use bracket_lib::prelude::{Point, Algorithm2D, BTerm, RED, DARK_RED, DARK_GRAY, GOLD, DARK_GOLDENROD, CRIMSON, BLACK, WHITE, ORANGE, DARK_ORANGE, YELLOW, GREEN, DARK_GREEN};
 use shipyard::{AddEntity, AllStoragesViewMut, EntitiesViewMut, EntityId, Get, IntoIter, IntoWithId, Remove, SparseSet, Storage, UniqueView, UniqueViewMut, View, ViewMut};
 use crate::colors::{ColorShifter, named_color, Color};
-use crate::entity::{HasSight, HasGlyph, HasPosition, IsDirty, IsPlayer, IsDoor, IsKnown};
+use crate::entity::{HasSight, HasGlyph, HasPosition, IsDirty, Player, IsDoor, IsKnown};
 use crate::game::{Batch, Store};
 use crate::game_systems::directives::MoveDirective;
 use crate::game_systems::{CarriesItem, IsItem, NotificationLog, notify, notify_if_alive, NotifyDirective, ResolvedIntents, UnlockDirective};
@@ -17,7 +17,7 @@ pub fn render_doors(mut batch: UniqueViewMut<Batch>,
                     has_position: View<HasPosition>,
                     has_glyph: View<HasGlyph>,
                     has_sight: View<HasSight>,
-                    is_player: View<IsPlayer>,) {
+                    is_player: View<Player>,) {
 
     if let Some((sight, _)) = (&has_sight, &is_player).iter().take(1).next() {
         batch.0.target(MAP_CONSOLE_LAYER);

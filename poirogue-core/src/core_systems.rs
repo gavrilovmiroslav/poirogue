@@ -85,14 +85,17 @@ pub fn on_command_generate_level(mut storages: AllStoragesViewMut,) {
 
             let starting_pos = get_random_from(&storage.rects).center();
 
-            storages.add_entity(
-                (IsPlayer,
-                 IsCharacter,
+            let player_entity = storages.add_entity(
+                (IsCharacter,
                  TimeTracked,
                  HasPosition(starting_pos),
                  HasGlyph(Glyph::new('@')),
                  HasSight{ sight_distance: 8, field_of_view: HashSet::new() }),
             );
+
+            let mut player_comp = storages.borrow::<UniqueViewMut<Player>>().unwrap();
+            player_comp.entity = Some(player_entity);
+            player_comp.cached_position = starting_pos;
 
             { *storages.borrow::<UniqueViewMut<Map>>().expect("Map") = new_map; }
         }
@@ -116,56 +119,59 @@ pub fn update_time(mut time: UniqueViewMut<Time>,
 }
 
 pub fn interpret_player_input_as_bump_intent(keyboard: UniqueView<KeyboardSnapshot>,
-                                             is_player: View<IsPlayer>,
+                                             player: UniqueView<Player>,
                                              mut positions: ViewMut<HasPosition>,
                                              mut time: UniqueView<Time>,
                                              mut context: UniqueViewMut<GameplayContext>,
                                              mut bumps: UniqueViewMut<VecDeque<BumpIntent>>, ) {
 
-    if *context != GameplayContext::MainGame { return; }
+    if let Some(entity) = player.entity {
+        if *context != GameplayContext::MainGame { return; }
 
-    for (id, (_, mut has_pos)) in (&is_player, &mut positions).iter().with_id() {
-        let pos = has_pos.get_mut();
-
-        let mut new_pos = Point::from(*pos);
+        let pos = (&mut positions).get(entity).unwrap();
+        let mut new_pos = Point::from(pos.0);
         if keyboard.is_pressed(VirtualKeyCode::W) { new_pos.y -= 1; }
         if keyboard.is_pressed(VirtualKeyCode::D) { new_pos.x += 1; }
         if keyboard.is_pressed(VirtualKeyCode::A) { new_pos.x -= 1; }
         if keyboard.is_pressed(VirtualKeyCode::X)
             || keyboard.is_pressed(VirtualKeyCode::S) { new_pos.y += 1; }
+
         if keyboard.is_pressed(VirtualKeyCode::Q) { new_pos.x -= 1; new_pos.y -= 1; }
         if keyboard.is_pressed(VirtualKeyCode::E) { new_pos.x += 1; new_pos.y -= 1; }
         if keyboard.is_pressed(VirtualKeyCode::Z) { new_pos.x -= 1; new_pos.y += 1; }
         if keyboard.is_pressed(VirtualKeyCode::C) { new_pos.x += 1; new_pos.y += 1; }
 
-        if *pos != new_pos {
-            bumps.push_back(BumpIntent { id: time.0, bumper: id, pos: new_pos });
+        if pos.0 != new_pos {
+            bumps.push_back(BumpIntent { id: time.0, bumper: entity, pos: new_pos });
         }
     }
 }
 
 pub fn interpret_player_input_as_pickup(keyboard: UniqueView<KeyboardSnapshot>,
-                                        is_player: View<IsPlayer>,
+                                        player: UniqueView<Player>,
                                         items: View<IsItem>,
                                         mut positions: ViewMut<HasPosition>,
                                         mut collects: UniqueViewMut<VecDeque<CollectIntent>>,
                                         mut time: UniqueView<Time>, ) {
 
-    if keyboard.is_pressed(VirtualKeyCode::Comma) {
-        let (player_id, (_, player_pos)) = (&is_player, &positions).iter().with_id().take(1).next().unwrap();
+    if let Some(entity) = player.entity {
+        if keyboard.is_pressed(VirtualKeyCode::Comma) {
+            let player_pos = (&positions).get(entity).unwrap();
 
-        for (item_id, _) in (&items, &positions).iter().with_id().filter(|(_, (item, pos))| pos.0 == player_pos.0) {
-            collects.push_back(CollectIntent { id: time.0, item: item_id, collector: player_id });
+            for (item_id, _) in (&items, &positions).iter().with_id().filter(|(_, (item, pos))| pos.0 == player_pos.0) {
+                collects.push_back(CollectIntent { id: time.0, item: item_id, collector: entity });
+            }
         }
     }
 }
 
-pub fn update_player_position(is_player: View<IsPlayer>,
-                              positions: View<HasPosition>,
-                              mut player_position: UniqueViewMut<PlayerPosition>,) {
+pub fn update_player_position(mut player: UniqueViewMut<Player>,
+                              positions: View<HasPosition>,) {
 
-    for (_, pos) in (&is_player, &positions).iter() {
-        player_position.0 = pos.0;
+    if let Some(entity) = player.entity {
+        if let Ok(pos) = (&positions).get(entity) {
+            player.cached_position = pos.0;
+        }
     }
 }
 
@@ -184,45 +190,50 @@ pub fn update_fields_of_view(mut positions: ViewMut<HasPosition>,
 pub fn render_player_field_of_view(mut batch: UniqueViewMut<Batch>,
                                    mut map: UniqueViewMut<Map>,
                                    has_sight: View<HasSight>,
-                                   is_player: View<IsPlayer>,) {
+                                   player: UniqueView<Player>,) {
 
-    if let Some((sight, _)) = (&has_sight, &is_player).iter().take(1).next() {
-        batch.0.target(MAP_CONSOLE_LAYER);
-        for pt in &sight.field_of_view {
-            if let Some(tile_index) = map.get_tile_index_from_point(*pt) {
-                let glyph = match map.tiles[tile_index] {
-                    MapTile::Obscured => '#',
-                    MapTile::Corridor | MapTile::Floor(_) => '.',
-                    MapTile::Door => '+',
-                    _ => ' '
-                };
+    if let Some(entity) = player.entity {
+        if let Ok((sight, )) = (&has_sight, ).get(entity) {
+            batch.0.target(MAP_CONSOLE_LAYER);
+            for pt in &sight.field_of_view {
+                if let Some(tile_index) = map.get_tile_index_from_point(*pt) {
+                    let glyph = match map.tiles[tile_index] {
+                        MapTile::Obscured => '#',
+                        MapTile::Corridor | MapTile::Floor(_) => '.',
+                        MapTile::Door => '+',
+                        _ => ' '
+                    };
 
-                batch.0.set(*pt, ColorPair::new(RGB::from((140, 90, 90)), RGB::named(BLACK)), glyph as u16);
+                    batch.0.set(*pt, ColorPair::new(RGB::from((140, 90, 90)), RGB::named(BLACK)), glyph as u16);
+                }
             }
         }
     }
 }
 
 pub fn render_player_visible_characters(mut batch: UniqueViewMut<Batch>,
-                                        is_player: View<IsPlayer>,
+                                        player: UniqueView<Player>,
                                         has_sight: View<HasSight>,
                                         character: View<IsCharacter>,
                                         positions: View<HasPosition>,
                                         glyphs: View<HasGlyph>,) {
 
-    if let Some((sight, _)) = (&has_sight, &is_player).iter().take(1).next() {
-        batch.0.target(MAP_CONSOLE_LAYER);
-        for (_, has_pos, has_glyph,) in (&character, &positions, &glyphs,).iter() {
-            let glyph = has_glyph.0;
-            let pos = has_pos.0;
-            if sight.field_of_view.contains(&pos) {
-                batch.0.set(pos, ColorPair::new(glyph.fg, glyph.bg), glyph.ch as u16);
+    if let Some(entity) = player.entity {
+        if let Ok((sight, )) = (&has_sight, ).get(entity) {
+            batch.0.target(MAP_CONSOLE_LAYER);
+            for (_, has_pos, has_glyph, ) in (&character, &positions, &glyphs, ).iter() {
+                let glyph = has_glyph.0;
+                let pos = has_pos.0;
+                if sight.field_of_view.contains(&pos) {
+                    batch.0.set(pos, ColorPair::new(glyph.fg, glyph.bg), glyph.ch as u16);
+                }
             }
         }
     }
 }
 
-pub fn clean_dirty(mut dirty: UniqueViewMut<IsDirty>, mut anim: UniqueViewMut<FlagAnimationDone>) {
+pub fn clean_dirty(mut dirty: UniqueViewMut<IsDirty>,
+                   mut anim: UniqueViewMut<FlagAnimationDone>) {
     dirty.0 = false;
     anim.0 = true;
 }
