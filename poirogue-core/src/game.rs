@@ -30,7 +30,7 @@ use crate::map_gen::run_map_gen;
 use crate::murder_gen::generate_murder;
 use crate::{core_systems, DRAWING_CONSOLE_LAYER, MAP_CONSOLE_LAYER, rand_gen, UI_CONSOLE_LAYER};
 use crate::colors::named_color;
-use crate::entity::{HasSight, HasGlyph, HasPosition, IsDirty, Player, Time};
+use crate::entity::{HasSight, HasGlyph, HasPosition, IsDirty, Player};
 use crate::glyph::Glyph;
 use crate::json::InternalJsonStorage;
 use crate::opt::Opt;
@@ -67,25 +67,42 @@ pub struct Game {
     pub args: Opt,
 }
 
-pub struct TimeTracked;
-pub struct Timeline(DoublePriorityQueue::<EntityId, u32>);
+pub struct Actionable { exhausted: bool }
+
+impl Default for Actionable {
+    fn default() -> Self {
+        Actionable { exhausted: false }
+    }
+}
+
+pub struct Timeline {
+    pub queue: DoublePriorityQueue::<EntityId, u32>,
+    pub active: EntityId,
+    pub current_time: u64,
+}
 
 impl Timeline {
     pub fn new() -> Timeline {
-        Timeline(DoublePriorityQueue::new())
+        Timeline {
+            queue: DoublePriorityQueue::new(),
+            active: EntityId::dead(),
+            current_time: 0
+        }
     }
 
     pub fn add(&mut self, id: EntityId, dt: u32) {
-        self.0.push(id, dt);
+        self.queue.push(id, dt);
     }
 
-    pub fn next(&mut self) -> Option<EntityId> {
-        self.0.pop_min().map(|t| t.0)
+    pub fn next(&mut self) {
+        self.active = self.queue.pop_min().map(|t| t.0).unwrap_or(EntityId::dead());
     }
 
     pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
+        self.queue.is_empty()
     }
+
+    pub fn tick(&mut self) { self.current_time += 1; }
 }
 
 impl Game {
@@ -213,7 +230,6 @@ impl Game {
         })).expect("Added Binary");
 
         game.world.add_unique(Batch(DrawBatch::new())).unwrap();
-        game.world.add_unique(Time(0u64)).unwrap();
         game.world.add_unique(IsDirty(true)).unwrap();
         game.world.add_unique(NotificationLog::new(args.log_height, args.log_expiry)).unwrap();
 
@@ -226,7 +242,7 @@ impl Game {
         game.world.add_unique(VecDeque::<NotifyDirective>::new()).unwrap();
         game.world.add_unique(Timeline::new());
 
-        Workload::builder("input handlers")
+        Workload::builder("meta input handlers")
             .with_system(&game_systems::on_input_keyboard_exit)
             .with_system(&game_systems::on_input_keyboard_generate_level)
             .add_to_world(&game.world).unwrap();
@@ -294,33 +310,34 @@ impl Game {
     }
 }
 
-impl GameState for Game {
-    fn tick(&mut self, ctx: &mut BTerm) {
-        fn process_game_commands(game: &mut Game) {
-            let mut more_commands = true;
+impl Game {
+    fn process_game_commands(&mut self) {
+        let mut more_commands = true;
 
-            while more_commands {
-                let command_count = game.world.borrow::<UniqueView<VecDeque<GameCommand>>>().unwrap().len();
-                game.world.run_workload("game command interpretations").unwrap();
-                let new_command_count = game.world.borrow::<UniqueView<VecDeque<GameCommand>>>().unwrap().len();
+        while more_commands {
+            let command_count = self.world.borrow::<UniqueView<VecDeque<GameCommand>>>().unwrap().len();
+            self.world.run_workload("game command interpretations").unwrap();
+            let new_command_count = self.world.borrow::<UniqueView<VecDeque<GameCommand>>>().unwrap().len();
 
-                if command_count == new_command_count && command_count > 0 {
-                    println!("Warning: removing uninterpreted game command {:?}",
-                             *game.world.borrow::<UniqueView<VecDeque<GameCommand>>>().unwrap().front().unwrap());
+            if command_count == new_command_count && command_count > 0 {
+                println!("Warning: removing uninterpreted game command {:?}",
+                         *self.world.borrow::<UniqueView<VecDeque<GameCommand>>>().unwrap().front().unwrap());
 
-                    game.world.borrow::<UniqueViewMut<VecDeque<GameCommand>>>().unwrap().pop_front();
-                    more_commands = false;
-                } else if new_command_count == 0 {
-                    more_commands = false;
-                }
+                self.world.borrow::<UniqueViewMut<VecDeque<GameCommand>>>().unwrap().pop_front();
+                more_commands = false;
+            } else if new_command_count == 0 {
+                more_commands = false;
             }
         }
+    }
+}
 
-        // meta
-        self.world.run(&game_systems::make_input_snapshots).unwrap();
-        self.world.run_workload("input handlers").unwrap();
+impl GameState for Game {
+    fn tick(&mut self, ctx: &mut BTerm) {
+        self.world.run(&core_systems::make_input_snapshots).unwrap();
+        self.world.run_workload("meta input handlers").unwrap();
 
-        process_game_commands(self);
+        self.process_game_commands();
 
         self.world.run(&core_systems::update_time).unwrap();
         self.world.run_workload("realtime updates").unwrap();

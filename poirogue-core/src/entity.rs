@@ -24,7 +24,6 @@ pub struct Player {
     pub cached_position: Point,
 }
 
-pub struct Time(pub(crate) u64);
 pub struct IsDirty(pub bool);
 
 pub struct IsKnown;

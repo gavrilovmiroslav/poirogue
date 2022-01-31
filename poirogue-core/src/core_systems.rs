@@ -10,7 +10,7 @@ use serde::ser::{Error, SerializeStruct};
 use crate::colors::named_color;
 use crate::commands::{FlowCommand, GameCommand, GameplayContext, HackCommand};
 use crate::entity::*;
-use crate::game::{Batch, FlagAnimationDone, FlagExit, Store, TimeTracked, Timeline, WindowSize};
+use crate::game::{Batch, FlagAnimationDone, FlagExit, Store, Actionable, Timeline, WindowSize};
 use crate::input::{InputSnapshot, InputSnapshots, KeyboardSnapshot, MouseSnapshot};
 use crate::map::Map;
 use crate::game_systems::directives::MoveDirective;
@@ -87,7 +87,7 @@ pub fn on_command_generate_level(mut storages: AllStoragesViewMut,) {
 
             let player_entity = storages.add_entity(
                 (IsCharacter,
-                 TimeTracked,
+                 Actionable::default(),
                  HasPosition(starting_pos),
                  HasGlyph(Glyph::new('@')),
                  HasSight{ sight_distance: 8, field_of_view: HashSet::new() }),
@@ -105,29 +105,36 @@ pub fn on_command_generate_level(mut storages: AllStoragesViewMut,) {
     }
 }
 
-pub fn update_time(mut time: UniqueViewMut<Time>,
-                   mut timeline: UniqueViewMut<Timeline>,
-                   timed: View<TimeTracked>) {
+pub fn update_time(mut timeline: UniqueViewMut<Timeline>,
+                   actionable: View<Actionable>) {
 
-    time.0 += 1;
+    timeline.tick();
 
     if timeline.is_empty() {
-        for (id, _) in (&timed).iter().with_id() {
+        for (id, _) in (&actionable).iter().with_id() {
             timeline.add(id, 0);
         }
+
+        if timeline.is_empty() {
+            panic!("No timed entities in game!");
+        }
     }
+}
+
+pub fn make_input_snapshots(mut keyboard: UniqueViewMut<KeyboardSnapshot>,
+                            mut mouse: UniqueViewMut<MouseSnapshot>) {
+    use std::borrow::Borrow;
+    keyboard.update(INPUT.lock().borrow());
+    mouse.update(INPUT.lock().borrow());
 }
 
 pub fn interpret_player_input_as_bump_intent(keyboard: UniqueView<KeyboardSnapshot>,
                                              player: UniqueView<Player>,
                                              mut positions: ViewMut<HasPosition>,
-                                             mut time: UniqueView<Time>,
-                                             mut context: UniqueViewMut<GameplayContext>,
+                                             mut timeline: UniqueView<Timeline>,
                                              mut bumps: UniqueViewMut<VecDeque<BumpIntent>>, ) {
 
     if let Some(entity) = player.entity {
-        if *context != GameplayContext::MainGame { return; }
-
         let pos = (&mut positions).get(entity).unwrap();
         let mut new_pos = Point::from(pos.0);
         if keyboard.is_pressed(VirtualKeyCode::W) { new_pos.y -= 1; }
@@ -142,7 +149,7 @@ pub fn interpret_player_input_as_bump_intent(keyboard: UniqueView<KeyboardSnapsh
         if keyboard.is_pressed(VirtualKeyCode::C) { new_pos.x += 1; new_pos.y += 1; }
 
         if pos.0 != new_pos {
-            bumps.push_back(BumpIntent { id: time.0, bumper: entity, pos: new_pos });
+            bumps.push_back(BumpIntent { id: timeline.current_time, bumper: entity, pos: new_pos });
         }
     }
 }
@@ -152,14 +159,14 @@ pub fn interpret_player_input_as_pickup(keyboard: UniqueView<KeyboardSnapshot>,
                                         items: View<IsItem>,
                                         mut positions: ViewMut<HasPosition>,
                                         mut collects: UniqueViewMut<VecDeque<CollectIntent>>,
-                                        mut time: UniqueView<Time>, ) {
+                                        mut time: UniqueView<Timeline>, ) {
 
     if let Some(entity) = player.entity {
         if keyboard.is_pressed(VirtualKeyCode::Comma) {
             let player_pos = (&positions).get(entity).unwrap();
 
             for (item_id, _) in (&items, &positions).iter().with_id().filter(|(_, (item, pos))| pos.0 == player_pos.0) {
-                collects.push_back(CollectIntent { id: time.0, item: item_id, collector: entity });
+                collects.push_back(CollectIntent { id: time.current_time, item: item_id, collector: entity });
             }
         }
     }
