@@ -4,7 +4,7 @@ use bracket_lib::prelude::{Point, Algorithm2D, BTerm, RED, DARK_RED, DARK_GRAY, 
 use shipyard::{AddEntity, AllStoragesViewMut, EntitiesViewMut, EntityId, Get, IntoIter, IntoWithId, Remove, SparseSet, Storage, UniqueView, UniqueViewMut, View, ViewMut};
 use crate::colors::{ColorShifter, named_color, Color};
 use crate::entity::{HasSight, HasGlyph, HasPosition, IsDirty, Player, IsDoor, IsKnown};
-use crate::game::{Batch, Store};
+use crate::game::{Batch, Store, Time};
 use crate::game_systems::directives::MoveDirective;
 use crate::game_systems::{CarriesItem, IsItem, NotificationLog, notify, notify_if_alive, NotifyDirective, ResolvedIntents, UnlockDirective};
 use crate::game_systems::intents::{BumpIntent, UnlockIntent};
@@ -37,7 +37,7 @@ pub fn on_bump_interpret_as_door_unlock_intent(doors: View<IsDoor>,
                                                has_position: View<HasPosition>,
                                                mut bump_intents: UniqueViewMut<VecDeque<BumpIntent>>,
                                                mut unlock_intents: UniqueViewMut<VecDeque<UnlockIntent>>,
-                                               mut handled: UniqueViewMut<ResolvedIntents>) {
+                                               mut handled: UniqueViewMut<ResolvedIntents>,) {
 
     for bump in bump_intents.iter().filter(|i| !handled.0.contains(&i.id)) {
         for (door_id, (door, pos)) in (&doors, &has_position).iter().with_id() {
@@ -56,7 +56,8 @@ pub fn on_bump_open_doors(mut map: UniqueViewMut<Map>,
                           mut has_glyph: ViewMut<HasGlyph>,
                           mut bump_intents: UniqueViewMut<VecDeque<BumpIntent>>,
                           mut dirty: UniqueViewMut<IsDirty>,
-                          mut handled: UniqueViewMut<ResolvedIntents>) {
+                          mut handled: UniqueViewMut<ResolvedIntents>,
+                          mut time: UniqueViewMut<Time>) {
 
     let mut resolved = Vec::new();
     for bump in bump_intents.iter().filter(|&&i| handled.not_handled(i)) {
@@ -71,6 +72,8 @@ pub fn on_bump_open_doors(mut map: UniqueViewMut<Map>,
             map.set_at_tile_index(tile_index, MapTile::Corridor);
 
             resolved.push(bump.id);
+
+            time.push_current_back(Time::TICK);
             dirty.0 = true;
         }
     }
@@ -85,10 +88,12 @@ pub fn on_unlock_if_has_key_for_door(items: View<IsItem>,
                                      mut unlock_directives: UniqueViewMut<VecDeque<UnlockDirective>>,
                                      mut notify_directives: UniqueViewMut<VecDeque<NotifyDirective>>,
                                      mut log: UniqueViewMut<NotificationLog>,
-                                     mut handled: UniqueViewMut<ResolvedIntents>) {
+                                     mut handled: UniqueViewMut<ResolvedIntents>,
+                                     mut time: UniqueViewMut<Time>) {
 
     let mut destroy_key = None;
     let mut resolved = Vec::new();
+
     for unlock in unlock_intents.iter().filter(|&&i| handled.not_handled(i)) {
         let target_id = unlock.target;
         let owner_id = unlock.entity;
@@ -106,8 +111,13 @@ pub fn on_unlock_if_has_key_for_door(items: View<IsItem>,
                     unlock_directives.push_back(UnlockDirective(door_id));
                     resolved.push(unlock.id);
                     destroy_key = Some(carry_id);
+
+                    time.push_current_back(Time::TICK);
+                    break;
+
                 } else {
                     notify_directives.push_back(notify_if_alive(unlock.id, format!("The door marked '{}' is locked.", door.sign).as_str()));
+                    break;
                 }
             }
         }

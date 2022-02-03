@@ -10,10 +10,9 @@ use serde::ser::{Error, SerializeStruct};
 use crate::colors::named_color;
 use crate::commands::{FlowCommand, GameCommand, GameplayContext, HackCommand};
 use crate::entity::*;
-use crate::game::{Batch, FlagAnimationDone, FlagExit, Store, Actionable, Timeline, WindowSize};
+use crate::game::{Batch, FlagAnimationDone, FlagExit, Store, Time, WindowSize};
 use crate::input::{InputSnapshot, InputSnapshots, KeyboardSnapshot, MouseSnapshot};
 use crate::map::Map;
-use crate::game_systems::directives::MoveDirective;
 use crate::game_systems::{CollectIntent, Intent, IsItem};
 use crate::game_systems::intents::{BumpIntent, UnlockIntent};
 use crate::glyph::Glyph;
@@ -83,19 +82,33 @@ pub fn on_command_generate_level(mut storages: AllStoragesViewMut,) {
                 }
             }
 
-            let starting_pos = get_random_from(&storage.rects).center();
+            {
+                let starting_pos = get_random_from(&storage.rects).center();
 
-            let player_entity = storages.add_entity(
-                (IsCharacter,
-                 Actionable::default(),
-                 HasPosition(starting_pos),
-                 HasGlyph(Glyph::new('@')),
-                 HasSight{ sight_distance: 8, field_of_view: HashSet::new() }),
-            );
+                let player_entity = storages.add_entity(
+                    (IsCharacter,
+                     HasCooldown::default(),
+                     HasPosition(starting_pos),
+                     HasGlyph(Glyph::new('@')),
+                     HasSight { sight_distance: 8, field_of_view: HashSet::new() }),
+                );
 
-            let mut player_comp = storages.borrow::<UniqueViewMut<Player>>().unwrap();
-            player_comp.entity = Some(player_entity);
-            player_comp.cached_position = starting_pos;
+                let mut player_comp = storages.borrow::<UniqueViewMut<Player>>().unwrap();
+                player_comp.entity = Some(player_entity);
+                player_comp.cached_position = starting_pos;
+            }
+
+            for i in 0..10 {
+                let starting_pos = get_random_from(&storage.rects).center();
+
+                let npc_entity = storages.add_entity(
+                    (IsCharacter,
+                     HasCooldown::with_skip(Time::MOMENT),
+                     HasPosition(starting_pos),
+                     HasGlyph(Glyph::new('k')),
+                     HasSight{ sight_distance: 8, field_of_view: HashSet::new() }),
+                );
+            }
 
             { *storages.borrow::<UniqueViewMut<Map>>().expect("Map") = new_map; }
         }
@@ -105,19 +118,38 @@ pub fn on_command_generate_level(mut storages: AllStoragesViewMut,) {
     }
 }
 
-pub fn update_time(mut timeline: UniqueViewMut<Timeline>,
-                   actionable: View<Actionable>) {
+pub fn update_time(mut timeline: UniqueViewMut<Time>,
+                   mut cooldowns: ViewMut<HasCooldown>) {
 
-    timeline.tick();
+    timeline.tick_blocked_time();
 
-    if timeline.is_empty() {
-        for (id, _) in (&actionable).iter().with_id() {
-            timeline.add(id, 0);
+    if timeline.action_queue.is_empty() {
+        timeline.tick();
+
+        for (id, mut cooldown) in (&mut cooldowns).iter().with_id() {
+            if cooldown.duration > 0 {
+                cooldown.duration -= 1;
+            } else {
+                cooldown.duration = 0;
+                timeline.enqueue(id);
+            }
         }
-
-        if timeline.is_empty() {
-            panic!("No timed entities in game!");
+    } else {
+        if let Some(skip_after) = (&cooldowns).get(timeline.peek_current()).unwrap().skip_after {
+            if timeline.is_blocked_for_longer_than(skip_after) {
+                timeline.push_current_back(Time::TICK);
+            }
         }
+    }
+}
+
+pub fn update_cooldowns_after_actions(mut timeline: UniqueViewMut<Time>,
+                                      mut cooldowns: ViewMut<HasCooldown>) {
+
+    while let Some((id, t)) = timeline.wait_queue.pop_front() {
+        (&mut cooldowns).get(id).map(|mut cooldown| {
+            cooldown.duration += t;
+        });
     }
 }
 
@@ -131,42 +163,38 @@ pub fn make_input_snapshots(mut keyboard: UniqueViewMut<KeyboardSnapshot>,
 pub fn interpret_player_input_as_bump_intent(keyboard: UniqueView<KeyboardSnapshot>,
                                              player: UniqueView<Player>,
                                              mut positions: ViewMut<HasPosition>,
-                                             mut timeline: UniqueView<Timeline>,
+                                             mut timeline: UniqueView<Time>,
                                              mut bumps: UniqueViewMut<VecDeque<BumpIntent>>, ) {
 
     if let Some(entity) = player.entity {
-        let pos = (&mut positions).get(entity).unwrap();
-        let mut new_pos = Point::from(pos.0);
-        if keyboard.is_pressed(VirtualKeyCode::W) { new_pos.y -= 1; }
-        if keyboard.is_pressed(VirtualKeyCode::D) { new_pos.x += 1; }
-        if keyboard.is_pressed(VirtualKeyCode::A) { new_pos.x -= 1; }
-        if keyboard.is_pressed(VirtualKeyCode::X)
-            || keyboard.is_pressed(VirtualKeyCode::S) { new_pos.y += 1; }
+        if timeline.is_current(entity) {
+            let pos = (&mut positions).get(entity).unwrap();
+            let mut new_pos = Point::from(pos.0);
+            if keyboard.is_pressed(VirtualKeyCode::W) { new_pos.y -= 1; }
+            if keyboard.is_pressed(VirtualKeyCode::D) { new_pos.x += 1; }
+            if keyboard.is_pressed(VirtualKeyCode::A) { new_pos.x -= 1; }
+            if keyboard.is_pressed(VirtualKeyCode::X)
+                || keyboard.is_pressed(VirtualKeyCode::S) { new_pos.y += 1; }
 
-        if keyboard.is_pressed(VirtualKeyCode::Q) { new_pos.x -= 1; new_pos.y -= 1; }
-        if keyboard.is_pressed(VirtualKeyCode::E) { new_pos.x += 1; new_pos.y -= 1; }
-        if keyboard.is_pressed(VirtualKeyCode::Z) { new_pos.x -= 1; new_pos.y += 1; }
-        if keyboard.is_pressed(VirtualKeyCode::C) { new_pos.x += 1; new_pos.y += 1; }
+            if keyboard.is_pressed(VirtualKeyCode::Q) {
+                new_pos.x -= 1;
+                new_pos.y -= 1;
+            }
+            if keyboard.is_pressed(VirtualKeyCode::E) {
+                new_pos.x += 1;
+                new_pos.y -= 1;
+            }
+            if keyboard.is_pressed(VirtualKeyCode::Z) {
+                new_pos.x -= 1;
+                new_pos.y += 1;
+            }
+            if keyboard.is_pressed(VirtualKeyCode::C) {
+                new_pos.x += 1;
+                new_pos.y += 1;
+            }
 
-        if pos.0 != new_pos {
-            bumps.push_back(BumpIntent { id: timeline.current_time, bumper: entity, pos: new_pos });
-        }
-    }
-}
-
-pub fn interpret_player_input_as_pickup(keyboard: UniqueView<KeyboardSnapshot>,
-                                        player: UniqueView<Player>,
-                                        items: View<IsItem>,
-                                        mut positions: ViewMut<HasPosition>,
-                                        mut collects: UniqueViewMut<VecDeque<CollectIntent>>,
-                                        mut time: UniqueView<Timeline>, ) {
-
-    if let Some(entity) = player.entity {
-        if keyboard.is_pressed(VirtualKeyCode::Comma) {
-            let player_pos = (&positions).get(entity).unwrap();
-
-            for (item_id, _) in (&items, &positions).iter().with_id().filter(|(_, (item, pos))| pos.0 == player_pos.0) {
-                collects.push_back(CollectIntent { id: time.current_time, item: item_id, collector: entity });
+            if pos.0 != new_pos {
+                bumps.push_back(BumpIntent { id: timeline.current_time, bumper: entity, pos: new_pos });
             }
         }
     }

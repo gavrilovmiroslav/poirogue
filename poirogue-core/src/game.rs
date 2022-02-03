@@ -67,42 +67,65 @@ pub struct Game {
     pub args: Opt,
 }
 
-pub struct Actionable { exhausted: bool }
-
-impl Default for Actionable {
-    fn default() -> Self {
-        Actionable { exhausted: false }
-    }
-}
-
-pub struct Timeline {
-    pub queue: DoublePriorityQueue::<EntityId, u32>,
-    pub active: EntityId,
+pub struct Time {
     pub current_time: u64,
+    pub action_queue: VecDeque<EntityId>,
+    pub wait_queue: VecDeque<(EntityId, Interval)>,
+    pub time_blocked_on_same_entity: u64,
 }
 
-impl Timeline {
-    pub fn new() -> Timeline {
-        Timeline {
-            queue: DoublePriorityQueue::new(),
-            active: EntityId::dead(),
-            current_time: 0
+type Interval = u16;
+
+impl Time {
+    pub const MOMENT: Interval = 1;
+    pub const TICK: Interval = 16;
+    pub const SECOND: Interval = 64;
+    pub const MINUTE: Interval = 64 * 64;
+
+    pub fn new() -> Time {
+        Time {
+            current_time: 0,
+            action_queue: VecDeque::default(),
+            wait_queue: VecDeque::default(),
+            time_blocked_on_same_entity: 0,
         }
     }
 
-    pub fn add(&mut self, id: EntityId, dt: u32) {
-        self.queue.push(id, dt);
+    pub fn tick_blocked_time(&mut self) {
+        self.time_blocked_on_same_entity += 1;
     }
 
-    pub fn next(&mut self) {
-        self.active = self.queue.pop_min().map(|t| t.0).unwrap_or(EntityId::dead());
+    pub fn is_blocked_for_longer_than(&self, t: Interval) -> bool {
+        self.time_blocked_on_same_entity > t as u64
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.queue.is_empty()
+    pub fn tick(&mut self) {
+        self.current_time += Time::MOMENT as u64;
+        self.action_queue.clear();
+        self.wait_queue.clear();
     }
 
-    pub fn tick(&mut self) { self.current_time += 1; }
+    pub fn enqueue(&mut self, entity: EntityId) {
+        self.action_queue.push_back(entity);
+    }
+
+    pub fn is_current(&self, e: EntityId) -> bool {
+        self.action_queue.front().unwrap_or(&EntityId::dead()) == &e
+    }
+
+    pub fn peek_current(&self) -> EntityId {
+        *self.action_queue.front().unwrap_or(&EntityId::dead())
+    }
+
+    pub fn push_current_back(&mut self, t: Interval) {
+        let old_front = self.action_queue.pop_front();
+        if let Some(entity) = old_front {
+            if entity != EntityId::dead() {
+                self.wait_queue.push_back((entity, t));
+                self.time_blocked_on_same_entity = 0;
+            }
+        }
+    }
 }
 
 impl Game {
@@ -240,7 +263,7 @@ impl Game {
         game.world.add_unique(VecDeque::<MoveDirective>::new()).unwrap();
         game.world.add_unique(VecDeque::<UnlockDirective>::new()).unwrap();
         game.world.add_unique(VecDeque::<NotifyDirective>::new()).unwrap();
-        game.world.add_unique(Timeline::new());
+        game.world.add_unique(Time::new());
 
         Workload::builder("meta input handlers")
             .with_system(&game_systems::on_input_keyboard_exit)
@@ -263,11 +286,10 @@ impl Game {
         Workload::builder("player input interpretations")
             .with_system(&game_systems::interpret_player_input_as_inventory_access)
             .with_system(&core_systems::interpret_player_input_as_bump_intent)
-            .with_system(&core_systems::interpret_player_input_as_pickup)
+            .with_system(&game_systems::interpret_player_input_as_pickup)
             .add_to_world(&game.world).unwrap();
 
         Workload::builder("bump interpretations")
-//            .with_system(&game_systems::on_bump_interpret_as_collect_item_intent)
             .with_system(&game_systems::on_bump_interpret_as_door_unlock_intent)
             .add_to_world(&game.world).unwrap();
 
@@ -362,6 +384,7 @@ impl GameState for Game {
         self.world.run_workload("player input interpretations").unwrap();
         self.world.run_workload("automated game systems").unwrap();
         self.world.run(&game_systems::delete_intents).unwrap();
+        self.world.run(&core_systems::update_cooldowns_after_actions).unwrap();
 
         if self.world.borrow::<UniqueView<FlagExit>>().unwrap().0 {
             ctx.quit();

@@ -7,7 +7,7 @@ use shipyard::{AddEntity, AllStoragesViewMut, EntitiesViewMut, EntityId, Get, In
 use crate::colors::{ColorShifter, named_color};
 use crate::commands::GameplayContext;
 use crate::entity::{HasSight, HasGlyph, HasPosition, IsDirty, Player};
-use crate::game::{Batch, Store};
+use crate::game::{Batch, Store, Time};
 use crate::game_systems::{BumpIntent, CollectIntent, MoveDirective, NotificationLog, ResolvedIntents};
 use crate::input::{InputSnapshot, KeyboardSnapshot};
 use crate::map::Map;
@@ -49,23 +49,23 @@ pub fn render_items(mut batch: UniqueViewMut<Batch>,
     }
 }
 
-pub fn on_bump_interpret_as_collect_item_intent(items: View<IsItem>,
-                                                has_position: View<HasPosition>,
-                                                mut bump_intents: UniqueViewMut<VecDeque<BumpIntent>>,
-                                                mut collect_intents: UniqueViewMut<VecDeque<CollectIntent>>,
-                                                mut handled: UniqueViewMut<ResolvedIntents>) {
+pub fn interpret_player_input_as_pickup(keyboard: UniqueView<KeyboardSnapshot>,
+                                        player: UniqueView<Player>,
+                                        items: View<IsItem>,
+                                        mut positions: ViewMut<HasPosition>,
+                                        mut collects: UniqueViewMut<VecDeque<CollectIntent>>,
+                                        mut time: UniqueView<Time>, ) {
 
-    for bump in bump_intents.iter().filter(|&&i| handled.not_handled(i)) {
-        for (item_id, (_, pos)) in (&items, &has_position).iter().with_id()
-            .filter(|(_, (i, _))| !i.is_collected) {
+    if let Some(entity) = player.entity {
+        if keyboard.is_pressed(VirtualKeyCode::Comma) {
+            let player_pos = (&positions).get(entity).unwrap();
 
-            if pos.0 == bump.pos {
-                collect_intents.push_back(CollectIntent { id: bump.id, collector: bump.bumper, item: item_id });
+            for (item_id, _) in (&items, &positions).iter().with_id().filter(|(_, (item, pos))| pos.0 == player_pos.0) {
+                collects.push_back(CollectIntent { id: time.current_time, item: item_id, collector: entity });
             }
         }
     }
 }
-
 
 pub fn on_collect_if_possible(mut items: ViewMut<IsItem>,
                               mut has_position: ViewMut<HasPosition>,
@@ -74,7 +74,8 @@ pub fn on_collect_if_possible(mut items: ViewMut<IsItem>,
                               mut log: UniqueViewMut<NotificationLog>,
                               mut is_dirty: UniqueViewMut<IsDirty>,
                               mut entities: EntitiesViewMut,
-                              mut handled: UniqueViewMut<ResolvedIntents>) {
+                              mut handled: UniqueViewMut<ResolvedIntents>,
+                              mut time: UniqueViewMut<Time>) {
 
     let mut resolved = Vec::new();
     for collect in collect_intents.iter().filter(|&&i| handled.not_handled(i)) {
@@ -90,6 +91,8 @@ pub fn on_collect_if_possible(mut items: ViewMut<IsItem>,
 
             resolved.push(collect.id);
             is_dirty.0 = true;
+
+            time.push_current_back(Time::TICK);
         }
     }
 

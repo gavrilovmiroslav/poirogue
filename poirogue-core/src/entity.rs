@@ -24,6 +24,18 @@ pub struct Player {
     pub cached_position: Point,
 }
 
+#[derive(Default)]
+pub struct HasCooldown {
+    pub duration: u16,
+    pub skip_after: Option<u16>,
+}
+
+impl HasCooldown {
+    pub fn with_skip(t: u16) -> HasCooldown {
+        HasCooldown{ duration: 0, skip_after: Some(t) }
+    }
+}
+
 pub struct IsDirty(pub bool);
 
 pub struct IsKnown;
