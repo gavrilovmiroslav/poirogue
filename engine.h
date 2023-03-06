@@ -590,6 +590,12 @@ struct AccessWorld_ModifyWorld : public Access
 	{
 		PoirogueEngine::Instance->entt_world.destroy(entity);
 	}
+
+    template<typename It>
+    void destroy_entities(It start, It end)
+    {
+        PoirogueEngine::Instance->entt_world.destroy(start, end);
+    }
 };
 
 struct AccessWorld_ModifyEntity : public Access

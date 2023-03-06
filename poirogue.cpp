@@ -2,40 +2,13 @@
 #include "utils.h"
 #include "graphs.h"
 #include "level.h"
+#include "people.h"
 
 #include <unordered_map>
 
 #undef main
 
 struct LevelCreationEvent {};
-
-struct LevelCreationSystem
-    : public OneOffSystem
-    , public AccessWorld_Unique<Level>
-    , public AccessEvents_Listen<KeyEvent>
-    , public AccessEvents_Emit<LevelCreationEvent>
-{
-    void activate() override
-    {
-        AccessWorld_Unique<Level>::access_unique().generate();
-        AccessEvents_Emit<LevelCreationEvent>::emit_event();
-    }
-
-    void react_to_event(KeyEvent& signal)
-    {
-        if (signal.key == KeyCode::KEY_SPACE)
-        {
-            AccessWorld_Unique<Level>::access_unique().generate();
-            AccessEvents_Emit<LevelCreationEvent>::emit_event();
-        }
-    }
-};
-
-struct Person {
-    std::string name;
-};
-
-struct Place {};
 
 struct Player {};
 
@@ -51,6 +24,81 @@ struct Health {
 struct WorldPosition {
     int x;
     int y;
+};
+
+
+struct LevelCreationSystem
+    : public OneOffSystem
+    , public AccessWorld_Unique<Level>
+    , public AccessWorld_Unique<PeopleMapping>
+    , public AccessWorld_QueryByEntity<Person>
+    , public AccessEvents_Listen<KeyEvent>
+    , public AccessEvents_Emit<LevelCreationEvent>    
+    , public AccessWorld_ModifyWorld
+    , public AccessWorld_ModifyEntity
+
+{
+    void generate()
+    {
+        std::unordered_set<int> used_spaces;
+
+        TCODRandom* rng = TCODRandom::getInstance();
+
+        AccessWorld_Unique<Level>::access_unique().generate();
+        auto& people_mapping = AccessWorld_Unique<PeopleMapping>::access_unique();         
+
+        auto queried = AccessWorld_QueryByEntity<Person>::query();
+        AccessWorld_ModifyWorld::destroy_entities(queried.begin(), queried.end());
+
+        people_mapping.graph.clear();
+
+        people_mapping = generate_people_graph();
+
+        auto& level = AccessWorld_Unique<Level>::access_unique();
+        for (auto person : people_mapping.people)
+        {
+            const int person_id = people_mapping.graph.get_tag<Person>(person).person_id;
+            for (auto edge : people_mapping.graph.get_all_edges(person))
+            {
+                if (people_mapping.graph.has_tag<LivesIn>(edge))
+                {
+                    auto place_node = people_mapping.graph.get_target(edge);
+                    const int region = people_mapping.graph.get_tag<Place>(place_node).place_id;
+                    
+                    auto& tile = level.region_tiles[region][rng->getInt(0, level.region_tiles[region].size() - 1)];
+                    while (used_spaces.count(TO_XY(tile.x, tile.y) > 0)) {
+                        tile = level.region_tiles[region][rng->getInt(0, level.region_tiles[region].size() - 1)];
+                    }
+
+                    used_spaces.insert(TO_XY(tile.x, tile.y));
+
+                    // create person
+                    auto person = AccessWorld_ModifyWorld::create_entity();
+                    AccessWorld_ModifyEntity::add_component<Person>(person, person_id);
+                    AccessWorld_ModifyEntity::add_component<Health>(person, 5, 5);
+                    
+                    std::string s(1, 'a' + person_id);
+                    AccessWorld_ModifyEntity::add_component<Symbol>(person, s);
+                    AccessWorld_ModifyEntity::add_component<WorldPosition>(person, (int)tile.x, (int)tile.y);
+                }
+            }
+        }
+    }
+
+    void activate() override
+    {
+        generate();
+        AccessEvents_Emit<LevelCreationEvent>::emit_event();
+    }
+
+    void react_to_event(KeyEvent& signal)
+    {
+        if (signal.key == KeyCode::KEY_SPACE)
+        {
+            generate();
+            AccessEvents_Emit<LevelCreationEvent>::emit_event();
+        }
+    }
 };
 
 struct PlayerCreationSystem

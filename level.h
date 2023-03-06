@@ -6,9 +6,8 @@
 #include <libtcod.hpp>
 
 #include "graphs.h"
+#include "config.h"
 
-#define WIDTH 80
-#define HEIGHT 52
 #define TO_XY(x, y) ((int)x + WIDTH * (int)y)
 
 struct XY 
@@ -31,9 +30,10 @@ struct Level
     char rooms[WIDTH][HEIGHT]{ ' ', };
     char regions[WIDTH][HEIGHT]{ ' ', };
     std::vector<XY> region_centers;
+    std::vector<XY> region_tiles[REGION_COUNT];
 
-    int tiles_in_room[20] { 0, };
-    std::vector<XY> tiles[20];
+    int tiles_in_room[ROOM_COUNT] { 0, };
+    std::vector<XY> tiles[ROOM_COUNT];
 
     std::vector<XY> walkable;
     std::bitset<WIDTH * HEIGHT> flood_fill_visited;
@@ -354,7 +354,7 @@ struct Level
     void room_counting()
     {
         tiles->clear();
-        for (int i = 0; i < 20; i++)
+        for (int i = 0; i < ROOM_COUNT; i++)
         {
             tiles_in_room[i] = 0;
         }
@@ -380,9 +380,9 @@ struct Level
             }
         }
 
-        for (int n = 0; n < 20; n++)
+        for (int n = 0; n < ROOM_COUNT; n++)
         {
-            if (tiles_in_room[n] < 10)
+            if (tiles_in_room[n] < MIN_TILES_PER_ROOM)
             {
                 for (int i = 0; i < WIDTH; i++)
                 {
@@ -407,9 +407,9 @@ struct Level
         int index = 0;
         std::vector<graphs::NodeEntity> nodes;
 
-        for (int i = 0; i < 20; i++)
+        for (int i = 0; i < ROOM_COUNT; i++)
         {
-            if (tiles_in_room[i] >= 10)
+            if (tiles_in_room[i] >= MIN_TILES_PER_ROOM)
             {
                 auto xy = tiles[i][tiles_in_room[i] / 2];
                 auto node = dig_plan.create_node();
@@ -480,18 +480,23 @@ struct Level
         TCOD_dijkstra_delete(d);
     }
 
-    void flood_fill_regions(int region_count)
+    void flood_fill_regions()
     {
         TCODRandom* rng = TCODRandom::getInstance();
 
-        int regions_left = region_count;
+        int regions_left = REGION_COUNT;
         int length = walkable.size() - 1;
+
+        for (int i = 0; i < REGION_COUNT; i++)
+        {
+            region_tiles[i].clear();
+        }
 
         for (int i = 0; i < WIDTH; i++)
         {
             for (int j = 0; j < HEIGHT; j++)
             {
-                regions[i][j] = ' ';                
+                regions[i][j] = ' ';
             }
         }
 
@@ -552,6 +557,7 @@ struct Level
                             if (dig[x + k][y + l] != ' ' && dig[x + k][y + l] != '0')
                             {
                                 regions[x + k][y + l] = '1' + i;
+                                region_tiles[i].push_back(XY{ (int8_t)(x + k), (int8_t)(y + l) });
                             }
                         }
                     }
@@ -586,7 +592,7 @@ struct Level
         room_counting();
         walkable = tiles[0];
 
-        flood_fill_regions(10);
+        flood_fill_regions();
     }
 };
 

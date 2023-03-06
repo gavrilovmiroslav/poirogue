@@ -51,6 +51,12 @@ namespace graphs
 		ecs::registry contents;
 		bool new_node_created;
 	public:
+		// DELETION
+		void clear()
+		{
+			contents.clear();
+			new_node_created = false;
+		}
 
 		// CREATION
 
@@ -67,6 +73,7 @@ namespace graphs
 			auto edge = contents.create();
 
 			assert(contents.all_of<Node>(a));
+			assert(contents.all_of<Node>(b));
 			auto& node_a = contents.get<Node>(a);
 			node_a.edges.push_back(edge);
 
@@ -187,7 +194,13 @@ namespace graphs
 		}
 
 		template<typename Tag>
-		Tag& get_tag(NodeEntity node)
+		bool has_tag(Entity node)
+		{
+			return contents.all_of<Tag>(node);
+		}
+
+		template<typename Tag>
+		Tag& get_tag(Entity node)
 		{			
 			return contents.get<Tag>(node);
 		}

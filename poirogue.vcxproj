@@ -134,9 +134,11 @@
     <ClCompile Include="poirogue.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="config.h" />
     <ClInclude Include="engine.h" />
     <ClInclude Include="graphs.h" />
     <ClInclude Include="level.h" />
+    <ClInclude Include="people.h" />
     <ClInclude Include="utils.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
