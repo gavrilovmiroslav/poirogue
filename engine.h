@@ -511,7 +511,10 @@ private:
 	friend struct AccessWorld_ModifyEntity;
 
 	template<typename... Qs>
-	friend struct AccessWorld_QueryWorld;
+	friend struct AccessWorld_QueryByEntity;
+
+    template<typename T>
+    friend struct AccessWorld_QueryByComponent;
 
 	template<typename T>
 	friend struct AccessEvents_Emit;
@@ -591,9 +594,16 @@ struct AccessWorld_ModifyWorld : public Access
 
 struct AccessWorld_ModifyEntity : public Access
 {
-	template<typename T, typename... Args>
+
+    template<typename T>
+    void add_tag_component(Entity entity)
+    {
+        PoirogueEngine::Instance->entt_world.emplace<T>(entity);
+    }
+    
+    template<typename T, typename... Args>
 	T& add_component(Entity entity, Args&&... args)
-	{
+	{        
 		return PoirogueEngine::Instance->entt_world.emplace<T>(entity, args...);
 	}
 
@@ -604,8 +614,22 @@ struct AccessWorld_ModifyEntity : public Access
 	}
 };
 
+template<typename T>
+struct AccessWorld_QueryByComponent : public Access
+{    
+    bool has_component(Entity e)
+    {
+        return PoirogueEngine::Instance->entt_world.all_of<T>(e);
+    }
+    
+    T& get_component(Entity e)
+    {
+        return PoirogueEngine::Instance->entt_world.get<T>(e);
+    }
+};
+
 template<typename... Qs>
-struct AccessWorld_QueryWorld : public Access
+struct AccessWorld_QueryByEntity : public Access
 {
 	auto query()
 	{
@@ -616,6 +640,11 @@ struct AccessWorld_QueryWorld : public Access
 template<typename T>
 struct AccessEvents_Emit : public Access
 {
+    void emit_event()
+    {
+        PoirogueEngine::Instance->entt_events.trigger<T>();
+    }
+
 	void emit_event(T signal)
 	{
 		PoirogueEngine::Instance->entt_events.trigger<T>(signal);

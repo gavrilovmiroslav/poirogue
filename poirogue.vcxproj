@@ -131,13 +131,12 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="engine.cpp" />
-    <ClCompile Include="map.cpp" />
     <ClCompile Include="poirogue.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="engine.h" />
     <ClInclude Include="graphs.h" />
-    <ClInclude Include="map.h" />
+    <ClInclude Include="level.h" />
     <ClInclude Include="utils.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

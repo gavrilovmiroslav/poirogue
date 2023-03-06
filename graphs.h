@@ -282,6 +282,8 @@ namespace graphs
 			Heap freelist(heap_cmp);
 			{
 				auto weighted_from_source = get_all_weighted_edges_from_node(nodes[0]);
+				if (weighted_from_source.size() == 0) return edges;
+
 				std::sort(weighted_from_source.begin(), weighted_from_source.end(), heap_cmp);
 				auto first = weighted_from_source[weighted_from_source.size() - 1];
 				freelist.push(first);
