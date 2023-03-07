@@ -3,7 +3,7 @@
 
 When explorers first reached the edge of heaven, they ran into the dark firmament that holds the stars. The ebony surface gave way to the innovative hermetic arts of the Outer Eye – through its crystaline structure they could glimpse ever-moving corridors, shy angelic creatures, and treasures beyond comprehension. Chisels and pickaxes in hand, people did what they knew...
 
-Two thousand years later, we are etching into the frontier walls still. Dark proclivities push us forward as the Known yearns to embrace the Unknown. At the edge, nerves are tested, strained, and often— break. A heinous crime has now happened within our colony. Justice had failed us long since here, but our Lord Administrator is not from here. You are summoned to deliver the perpetrator to them within a week. You are to succeed where we all failed, we who have known us and ours for generations and have still been blind. 
+Two hundred years later, we are etching into the frontier walls still. Dark proclivities push us forward as the Known yearns to embrace the Unknown. At the edge, nerves are tested, strained, and often— break. A heinous crime has now happened within our colony. Justice had failed us long since here, but our Lord Administrator is not from here. You are summoned to deliver the perpetrator to them within a week. You are to succeed where we all failed, we who have known us and ours for generations and have still been blind. 
 
 May the darkness in these walls give your mind clarity, detective.
 
