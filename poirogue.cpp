@@ -54,8 +54,7 @@ int main(int argc, char* argv[])
 {
     PoirogueEngine engine;
     engine.add_one_off_system<LevelCreationSystem>();
-    engine.add_one_off_system<PlayerCreationSystem>(); 
-    //engine.add_one_off_system<Debug_PlayerDamageDealingSystem>();
+    engine.add_one_off_system<PlayerCreationSystem>();     
 
     engine.add_runtime_system<LevelRenderSystem>();
     engine.add_runtime_system<ShimmerRenderSystem>();

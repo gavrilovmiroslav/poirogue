@@ -24,15 +24,3 @@ void PlayerCreationSystem::react_to_event(LevelCreationEvent& signal)
     this->AccessWorld_ModifyEntity::add_component<Symbol>(last_player_entity, "@");
     this->AccessWorld_ModifyEntity::add_component<WorldPosition>(last_player_entity, pos.x, pos.y);
 }
-
-void Debug_PlayerDamageDealingSystem::react_to_event(KeyEvent& signal)
-{
-    if (signal.key == KeyCode::KEY_D)
-    {
-        for (auto&& [entity, health] : AccessWorld_QueryByEntity<Player, Health>::query().each())
-        {
-            health.current_hp--;
-            if (health.current_hp < 0) health.current_hp = 0;
-        }
-    }
-}

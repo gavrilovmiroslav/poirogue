@@ -19,11 +19,3 @@ struct PlayerCreationSystem
 
     void react_to_event(LevelCreationEvent& signal) override;
 };
-
-struct Debug_PlayerDamageDealingSystem
-    : public OneOffSystem
-    , public AccessWorld_QueryByEntity<Player, Health>
-    , public AccessEvents_Listen<KeyEvent>
-{
-    void react_to_event(KeyEvent& signal) override;
-};
