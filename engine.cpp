@@ -4,12 +4,15 @@
 #include <fstream>
 #include <sstream>
 
+#include <chrono>
+using namespace std::chrono;
+
 PoirogueEngine::PoirogueEngine()
     : engine_running{ true }
 {
     PoirogueEngine::Instance = this;
 
-    tcod_console = tcod::Console{ 80, 52 };
+    tcod_console = tcod::Console{ WIDTH, HEIGHT };
     auto params = TCOD_ContextParams{};
 
     params.tcod_version = TCOD_COMPILEDVERSION;
@@ -94,12 +97,13 @@ void PoirogueEngine::poll_events()
 void PoirogueEngine::end_frame()
 {
     tcod_context.present(tcod_console);
+    entt_events.trigger<Tick>(Tick{});
 }
 
 void PoirogueEngine::run_systems()
 {
     for (auto& system : runtime_systems)
-    {
+    {        
         system->activate();
     }
 }
@@ -148,4 +152,54 @@ void AccessConsole::fg(const Position& pt, RGB color)
     {
         tcod::print(PoirogueEngine::Instance->tcod_console, pos, " ", color, std::nullopt);
     }
+}
+
+AccessBackConsole::AccessBackConsole()
+{
+    console = tcod::Console{ WIDTH, HEIGHT };
+}
+
+void AccessBackConsole::clear()
+{
+    TCOD_console_clear(console.get());
+}
+
+void AccessBackConsole::ch(const Position& pt, std::string_view text)
+{
+    tcod::print(console, (std::array<int, 2>&)pt, text, std::nullopt, std::nullopt);
+}
+
+void AccessBackConsole::bg(const Position& pt, RGB color)
+{
+    std::array<int, 2>& pos = (std::array<int, 2>&)pt;
+    if (console.in_bounds(pos))
+    {
+        auto& tile = console.at(pos);
+        tcod::print(console, pos, codepoint_to_utf8(tile.ch), std::nullopt, color);
+    }
+    else
+    {
+        tcod::print(console, pos, " ", std::nullopt, color);
+    }
+}
+
+void AccessBackConsole::fg(const Position& pt, RGB color)
+{
+    std::array<int, 2>& pos = (std::array<int, 2>&)pt;
+    if (console.in_bounds(pos))
+    {
+        auto& tile = console.at((std::array<int, 2>&)pt);
+        tcod::print(console, (std::array<int, 2>&)pt, codepoint_to_utf8(tile.ch), color, std::nullopt);
+    }
+    else
+    {
+        tcod::print(console, pos, " ", color, std::nullopt);
+    }
+}
+
+void AccessBackConsole::blit(float fg_alpha, float bg_alpha)
+{
+    TCOD_console_blit(
+        console.get(), 0, 0, 0, 0, 
+        PoirogueEngine::Instance->tcod_console.get(), 0, 0, fg_alpha, bg_alpha);
 }

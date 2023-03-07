@@ -1,153 +1,16 @@
+
+#include "config.h"
+#include "common.h"
 #include "engine.h"
 #include "utils.h"
 #include "graphs.h"
 #include "level.h"
+#include "player.h"
 #include "people.h"
 
 #include <unordered_map>
 
 #undef main
-
-struct LevelCreationEvent {};
-
-struct Player {};
-
-struct Symbol {
-    std::string sym;
-};
-
-struct Health {
-    int max_hp;
-    int current_hp;
-};
-
-struct WorldPosition {
-    int x;
-    int y;
-};
-
-
-struct LevelCreationSystem
-    : public OneOffSystem
-    , public AccessWorld_Unique<Level>
-    , public AccessWorld_Unique<PeopleMapping>
-    , public AccessWorld_QueryByEntity<Person>
-    , public AccessEvents_Listen<KeyEvent>
-    , public AccessEvents_Emit<LevelCreationEvent>    
-    , public AccessWorld_ModifyWorld
-    , public AccessWorld_ModifyEntity
-
-{
-    void generate()
-    {
-        std::unordered_set<int> used_spaces;
-
-        TCODRandom* rng = TCODRandom::getInstance();
-
-        AccessWorld_Unique<Level>::access_unique().generate();
-        auto& people_mapping = AccessWorld_Unique<PeopleMapping>::access_unique();         
-
-        auto queried = AccessWorld_QueryByEntity<Person>::query();
-        AccessWorld_ModifyWorld::destroy_entities(queried.begin(), queried.end());
-
-        people_mapping.graph.clear();
-
-        people_mapping = generate_people_graph();
-
-        auto& level = AccessWorld_Unique<Level>::access_unique();
-        for (auto person : people_mapping.people)
-        {
-            const int person_id = people_mapping.graph.get_tag<Person>(person).person_id;
-            for (auto edge : people_mapping.graph.get_all_edges(person))
-            {
-                if (people_mapping.graph.has_tag<LivesIn>(edge))
-                {
-                    auto place_node = people_mapping.graph.get_target(edge);
-                    const int region = people_mapping.graph.get_tag<Place>(place_node).place_id;
-                    
-                    auto& tile = level.region_tiles[region][rng->getInt(0, level.region_tiles[region].size() - 1)];
-                    while (used_spaces.count(TO_XY(tile.x, tile.y) > 0)) {
-                        tile = level.region_tiles[region][rng->getInt(0, level.region_tiles[region].size() - 1)];
-                    }
-
-                    used_spaces.insert(TO_XY(tile.x, tile.y));
-
-                    // create person
-                    auto person = AccessWorld_ModifyWorld::create_entity();
-                    AccessWorld_ModifyEntity::add_component<Person>(person, person_id);
-                    AccessWorld_ModifyEntity::add_component<Health>(person, 5, 5);
-                    
-                    std::string s(1, 'a' + person_id);
-                    AccessWorld_ModifyEntity::add_component<Symbol>(person, s);
-                    AccessWorld_ModifyEntity::add_component<WorldPosition>(person, (int)tile.x, (int)tile.y);
-                }
-            }
-        }
-    }
-
-    void activate() override
-    {
-        generate();
-        AccessEvents_Emit<LevelCreationEvent>::emit_event();
-    }
-
-    void react_to_event(KeyEvent& signal)
-    {
-        if (signal.key == KeyCode::KEY_SPACE)
-        {
-            generate();
-            AccessEvents_Emit<LevelCreationEvent>::emit_event();
-        }
-    }
-};
-
-struct PlayerCreationSystem
-    : public OneOffSystem
-    , public AccessWorld_Unique<Level>
-    , public AccessWorld_ModifyWorld
-    , public AccessWorld_ModifyEntity
-    , public AccessEvents_Listen<LevelCreationEvent>
-{
-    Entity last_player_entity = entt::null;
-
-    void react_to_event(LevelCreationEvent& signal) override    
-    {
-        if (last_player_entity != entt::null)
-        {
-            AccessWorld_ModifyWorld::destroy_entity(last_player_entity);
-        }
-
-        TCODRandom* rng = TCODRandom::getInstance();
-        last_player_entity = AccessWorld_ModifyWorld::create_entity();
-
-        const auto& level = AccessWorld_Unique<Level>::access_unique();        
-        const auto size = level.walkable.size();
-        const auto pos = level.walkable[rng->getInt(0, size)];
-
-        AccessWorld_ModifyEntity::add_tag_component<Player>(last_player_entity);
-        AccessWorld_ModifyEntity::add_component<Health>(last_player_entity, 5, 5);
-        AccessWorld_ModifyEntity::add_component<Symbol>(last_player_entity, "@");
-        AccessWorld_ModifyEntity::add_component<WorldPosition>(last_player_entity, pos.x, pos.y);
-    }
-};
-
-struct Debug_PlayerDamageDealingSystem
-    : public OneOffSystem
-    , public AccessWorld_QueryByEntity<Player, Health>
-    , public AccessEvents_Listen<KeyEvent>
-{
-    void react_to_event(KeyEvent& signal) override
-    {
-        if (signal.key == KeyCode::KEY_D)
-        {
-            for (auto&& [entity, health] : AccessWorld_QueryByEntity<Player, Health>::query().each())
-            {
-                health.current_hp--;
-                if (health.current_hp < 0) health.current_hp = 0;
-            }
-        }
-    }
-};
 
 struct SymbolRenderSystem
     : public RuntimeSystem
@@ -187,100 +50,6 @@ struct MouseCursorSystem
     }
 };
 
-enum Debug_RenderMode
-{
-    Off = 0,
-    RoomNumbers,
-    Regions,
-    COUNT
-};
-
-struct Debug_RoomLevelRenderSystem
-    : public RuntimeSystem
-    , public AccessConsole
-    , public AccessEvents_Listen<KeyEvent>
-    , public AccessWorld_Unique<Level>
-{
-    Debug_RenderMode mode = Debug_RenderMode::Off;
-
-    void activate() override
-    {
-        if (mode == Debug_RenderMode::Off) return;
-
-        const auto& level = access_unique();
-
-        if (mode == Debug_RenderMode::RoomNumbers)
-        {
-            for (int i = 0; i < 80; i++)
-            {
-                for (int j = 0; j < 52; j++)
-                {
-                    if (level.rooms[i][j] != ' ')
-                    {
-                        std::string s(1, level.rooms[i][j]);
-                        ch({ i, j }, s);
-                    }
-                }
-            }
-        }
-        else if (mode == Debug_RenderMode::Regions)
-        {
-            for (int i = 0; i < 80; i++)
-            {
-                for (int j = 0; j < 52; j++)
-                {
-                    if (level.regions[i][j] != ' ')
-                    {
-                        std::string s(1, level.regions[i][j]);
-                        ch({ i, j }, s);
-                    }
-                }
-            }
-        }
-    }
-
-    void react_to_event(KeyEvent& signal) override
-    {
-        if (signal.key == KeyCode::KEY_TAB)
-        {
-            mode = (Debug_RenderMode)(((int)mode + 1) % Debug_RenderMode::COUNT);
-        }
-    }
-};
-
-struct LevelRenderSystem
-    : public RuntimeSystem    
-    , public AccessConsole
-    , public AccessWorld_Unique<Level>
-{
-    void activate() override
-    {
-        TCODRandom* rng = TCODRandom::getInstance();
-        const auto& level = access_unique();
-        
-        for (int i = 0; i < 80; i++)
-        {
-            for (int j = 0; j < 52; j++)
-            {
-                float f = level.floor[i][j] * 0.5f;
-                if (f > 0.1f && level.dig[i][j] != ' ')
-                {
-                    bg({ i, j }, HSL(rng->getFloat(160.0f, 190.0f), f, rng->getFloat(0.5f, 0.85f)));
-                }
-                else
-                {
-                    bg({ i, j }, RGB(0, 0, 0));
-                }
-
-                fg({ i, j }, RGB(128, 128, 128));
-                
-                std::string s(1, level.dig[i][j]);
-                ch({ i, j }, s);
-            }
-        }
-    }
-};
-
 int main(int argc, char* argv[])
 {
     PoirogueEngine engine;
@@ -289,8 +58,9 @@ int main(int argc, char* argv[])
     //engine.add_one_off_system<Debug_PlayerDamageDealingSystem>();
 
     engine.add_runtime_system<LevelRenderSystem>();
+    engine.add_runtime_system<ShimmerRenderSystem>();
     engine.add_runtime_system<Debug_RoomLevelRenderSystem>();
-    engine.add_runtime_system<SymbolRenderSystem>();
+    engine.add_runtime_system<SymbolRenderSystem>();    
     engine.add_runtime_system<MouseCursorSystem>();
 
     engine.restart_game();
