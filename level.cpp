@@ -540,6 +540,17 @@ void Level::flood_fill_regions()
     }
 }
 
+void Level::update_map_visibility()
+{
+    for (int i = 0; i < WIDTH; i++)
+    {
+        for (int j = 0; j < HEIGHT; j++)
+        {
+            map->setProperties(i, j, dig[i][j] != ' ', dig[i][j] != ' ');
+        }
+    }
+}
+
 void Level::generate()
 {
     init();
@@ -556,6 +567,7 @@ void Level::generate()
     walkable = tiles[0];
 
     flood_fill_regions();
+    update_map_visibility();
 }
 
 
@@ -565,16 +577,16 @@ void LevelCreationSystem::generate()
 
     TCODRandom* rng = TCODRandom::getInstance();
 
-    AccessWorld_Unique<Level>::access_unique().generate();
-    auto& people_mapping = AccessWorld_Unique<PeopleMapping>::access_unique();
+    AccessWorld_UseUnique<Level>::access_unique().generate();
+    auto& people_mapping = AccessWorld_UseUnique<PeopleMapping>::access_unique();
     people_mapping.graph.reset();
 
-    auto queried = AccessWorld_QueryByEntity<Person>::query();
+    auto queried = AccessWorld_QueryAllEntitiesWith<Person>::query();
     AccessWorld_ModifyWorld::destroy_entities(queried.begin(), queried.end());    
 
     people_mapping = generate_people_graph();
 
-    auto& level = AccessWorld_Unique<Level>::access_unique();
+    auto& level = AccessWorld_UseUnique<Level>::access_unique();
     for (auto person : people_mapping.people)
     {
         const int person_id = people_mapping.graph->get_tag<Person>(person).person_id;
@@ -595,10 +607,14 @@ void LevelCreationSystem::generate()
                 // create person
                 auto person = AccessWorld_ModifyWorld::create_entity();
                 AccessWorld_ModifyEntity::add_component<Person>(person, person_id);
-                AccessWorld_ModifyEntity::add_component<Health>(person, 5, 5);
+                AccessWorld_ModifyEntity::add_component<Name>(person, "Person #" + std::to_string(person_id));
+                AccessWorld_ModifyEntity::add_component<Health>(person, 100, 100);
+                AccessWorld_ModifyEntity::add_component<ActionPoints>(person, 0);
+                AccessWorld_ModifyEntity::add_component<Speed>(person, rng->getInt(80, 110));
 
-                std::string s(1, 'a' + person_id);
+                std::string s(1, 'A' + person_id);
                 AccessWorld_ModifyEntity::add_component<Symbol>(person, s);
+                AccessWorld_ModifyEntity::add_component<AIPlayer>(person);                
                 AccessWorld_ModifyEntity::add_component<WorldPosition>(person, (int)tile.x, (int)tile.y);
             }
         }
@@ -668,40 +684,62 @@ void Debug_RoomLevelRenderSystem::react_to_event(KeyEvent& signal)
 
 void LevelRenderSystem::activate()
 {
-    TCODRandom* rng = TCODRandom::getInstance();
-    const auto& level = access_unique();
-
-    for (int i = 0; i < 80; i++)
-    {
-        for (int j = 0; j < 52; j++)
-        {
-            AccessConsole::fg({ i, j }, RGB(128, 128, 128));
-
-            std::string s(1, level.dig[i][j]);
-            AccessConsole::ch({ i, j }, s);
-        }
-    }
-}
-
-
-
-void ShimmerRenderSystem::activate()
-{
     tick++;
 
     TCODRandom* rng = TCODRandom::getInstance();
     const auto& level = access_unique();
 
+    const auto player_entity = AccessWorld_QueryAllEntitiesWith<Player>::query().front();
+    const auto& world_pos = AccessWorld_QueryComponent<WorldPosition>::get_component(player_entity);
+    const auto& sight = AccessWorld_QueryComponent<Sight>::get_component(player_entity);
+
+    const auto xy = XY{ (int8_t)world_pos.x, (int8_t)world_pos.y };
+    const auto rad = (float)sight.radius;
+    const auto radius = (float)sight.radius * 2.0f;
+
     for (int i = 0; i < 80; i++)
     {
         for (int j = 0; j < 52; j++)
         {
-            if (level.dig[i][j] == '*')
+            if (level.map->isInFov(i, j))
             {
-                auto time_factor = std::sin((i + j) * SHIMMER_STRIPE_WIDTH + tick * SHIMMER_STRIPE_SPEED);
-                bg({ i, j }, 
-                    HSL(SHIMMER_BASE_HUE + time_factor * SHIMMER_STRIPE_STRENGTH,
-                    1.0f, rng->getFloat(0.95f, 1.0f)));
+                const auto ij = XY{ (int8_t)i, (int8_t)j };
+                const auto dist = xy.distance(ij);
+
+                float dist_factor = 1.0f;
+                if (dist >= sight.radius * 0.9f)
+                {
+                    dist_factor = 0.35f;
+                }
+                else if (dist >= sight.radius * 0.75f)
+                {
+                    dist_factor = 0.85f;
+                }
+                else if (dist >= sight.radius * 0.5f)
+                {
+                    dist_factor = 0.95f;
+                }
+
+                if (level.dig[i][j] == ' ')
+                {
+                    AccessConsole::fg({ i, j }, HSL(255.0f, 0.3f, dist_factor));
+                    AccessConsole::ch({ i, j }, "#");
+                }
+                else if (level.dig[i][j] == '*')
+                {
+                    auto time_factor = std::sin((i + j) * SHIMMER_STRIPE_WIDTH + tick * SHIMMER_STRIPE_SPEED);
+                    bg({ i, j }, HSL(SHIMMER_BASE_HUE + time_factor * SHIMMER_STRIPE_STRENGTH, 1.0f,
+                        rng->getFloat(0.95f, 1.0f) * (rad - xy.distance(ij)) / radius));
+                    AccessConsole::fg({ i, j }, HSL(255.0f, 0.3f, 2 * (radius - xy.distance(ij)) / rad));
+
+                    ch({ i, j }, ".");
+                }
+                else
+                {
+                    AccessConsole::fg({ i, j }, HSL(255.0f, 0.3f, dist_factor));
+                    std::string s(1, level.dig[i][j]);
+                    AccessConsole::ch({ i, j }, s);
+                }
             }
         }
     }

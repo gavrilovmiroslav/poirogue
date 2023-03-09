@@ -10,6 +10,8 @@
 #include "utils.h"
 #include "common.h"
 
+#include <cstdio>
+
 struct System 
 {
     virtual void activate() {}
@@ -45,17 +47,19 @@ protected:
 	std::vector<std::shared_ptr<RuntimeSystem>> runtime_systems;
 
 public:
-
     template<typename T>
-    void add_one_off_system()
+    std::shared_ptr<T> add_one_off_system()
     {
-        one_offs_systems.push_back(std::shared_ptr<T>{ new T() });
+        std::shared_ptr<T> ptr{ new T };
+        one_offs_systems.push_back(ptr);
+
+        return ptr;
     }
 
     template<typename T>
     std::shared_ptr<T> add_runtime_system()
     {
-        std::shared_ptr<T> ptr{ new T{} };
+        std::shared_ptr<T> ptr{ new T };
         runtime_systems.push_back(ptr);
 
         return ptr;
@@ -77,19 +81,20 @@ private:
     friend struct AccessConsole;
     friend struct AccessBackConsole;
 
+    friend struct AccessWorld_CheckValidity;
     friend struct AccessMousePosition;
 
     template<typename T>
-    friend struct AccessWorld_Unique;
+    friend struct AccessWorld_UseUnique;
     
 	friend struct AccessWorld_ModifyWorld;
 	friend struct AccessWorld_ModifyEntity;
 
-	template<typename... Qs>
-	friend struct AccessWorld_QueryByEntity;
-
     template<typename T>
-    friend struct AccessWorld_QueryByComponent;
+    friend struct AccessWorld_QueryComponent;
+
+    template<typename... Qs>
+    friend struct AccessWorld_QueryAllEntitiesWith;
 
 	template<typename T>
 	friend struct AccessEvents_Emit;
@@ -99,6 +104,8 @@ private:
 
 	template<typename T>
 	friend struct ScriptComponent;
+
+    friend struct AccessWorld_DirectRegistry;
 };
 
 struct Access
@@ -119,11 +126,28 @@ struct Access
     }
 };
 
+struct AccessWorld_DirectRegistry
+{
+    entt::registry& get_registry()
+    {
+        return PoirogueEngine::Instance->entt_world;
+    }
+};
+
 struct AccessConsole : public Access
 {
+    void str(const Position& pt, std::string_view text, RGB fg);
     void ch(const Position& pt, std::string_view text);    
     void bg(const Position& pt, RGB color);    
     void fg(const Position& pt, RGB color);
+};
+
+struct AccessWorld_CheckValidity : public Access
+{
+    bool is_valid(Entity entity) const
+    {
+        return PoirogueEngine::Instance->entt_world.valid(entity);
+    }
 };
 
 struct AccessBackConsole : public Access
@@ -149,35 +173,23 @@ struct AccessMousePosition : public Access
 };
 
 template<typename T>
-struct AccessWorld_Unique : public Access
+struct AccessWorld_UseUnique : public Access
 {
-    T& access_unique() const
+    T& access_unique()
     {
-        auto& registry = PoirogueEngine::Instance->entt_world;
-        if (!Access::unique_resources_contain<T>())
-        {
-            auto key = get_unique_resource_id<T>();
-            auto entity = registry.create();
-            registry.emplace_or_replace<T>(entity);
-            Access::unique_resources.insert({ key, entity });
-        }
-
-        auto key = get_unique_resource_id<T>();
-        auto unique_res = unique_resources[key];        
-        return registry.get<T>(unique_res);
+        static T unique_resource;
+        return unique_resource;
     }
 };
 
 struct AccessWorld_ModifyWorld : public Access
 {
-	Entity create_entity()
-	{
-		return PoirogueEngine::Instance->entt_world.create();
-	}
+    Entity create_entity();
 
-	void destroy_entity(Entity entity)
+    void destroy_entity(Entity entity)
 	{
-		PoirogueEngine::Instance->entt_world.destroy(entity);
+        if (PoirogueEngine::Instance->entt_world.valid(entity))
+    		PoirogueEngine::Instance->entt_world.destroy(entity);
 	}
 
     template<typename It>
@@ -210,7 +222,7 @@ struct AccessWorld_ModifyEntity : public Access
 };
 
 template<typename T>
-struct AccessWorld_QueryByComponent : public Access
+struct AccessWorld_QueryComponent : public Access
 {    
     bool has_component(Entity e)
     {
@@ -224,7 +236,7 @@ struct AccessWorld_QueryByComponent : public Access
 };
 
 template<typename... Qs>
-struct AccessWorld_QueryByEntity : public Access
+struct AccessWorld_QueryAllEntitiesWith : public Access
 {
 	auto query()
 	{
@@ -240,10 +252,10 @@ struct AccessEvents_Emit : public Access
         PoirogueEngine::Instance->entt_events.trigger<T>();
     }
 
-	void emit_event(T signal)
-	{
-		PoirogueEngine::Instance->entt_events.trigger<T>(signal);
-	}
+    void emit_event(T signal)
+    {
+        PoirogueEngine::Instance->entt_events.trigger<T>(std::forward<T>(signal));
+    }
 };
 
 template<typename T>

@@ -6,6 +6,7 @@
 #include <SDL2/SDL.h>
 #include <libtcod/libtcod.hpp>
 
+#include <queue>
 #include <string>
 #include <memory>
 
@@ -45,9 +46,12 @@ using Entity = ecs::entity;
 
 struct Player {};
 
+struct Name {
+    std::string name;
+};
+
 struct Person {
     int person_id;
-    std::string name;
 };
 
 struct Place { int place_id; };
@@ -70,15 +74,66 @@ struct PeopleMapping
     std::shared_ptr<graphs::Graph> graph;
 };
 
-struct ActionPointOwner 
+struct CurrentInTurn
+{
+    Entity current = entt::null;
+};
+
+struct AIPlayer
+{
+    bool turn_started = false;
+};
+
+struct Speed
+{
+    int speed;
+};
+
+struct ActionPoints
 {
     int ap;
 };
 
-struct Action 
+using TurnOrder = std::tuple<ActionPoints, Speed, Entity>;
+
+struct TurnOrderSort
 {
-    int ap_cost;
+    bool operator() (const TurnOrder l, const TurnOrder r)
+    {
+        auto lv = std::get<0>(l).ap * 10000 + std::get<1>(l).speed;
+        auto rv = std::get<0>(r).ap * 10000 + std::get<1>(r).speed;
+        return lv < rv;
+    }
 };
+
+struct TurnOrderQueue
+{
+    std::priority_queue<TurnOrder, std::vector<TurnOrder>, TurnOrderSort> order;
+};
+
+
+struct AwaitingActionSignal
+{
+    Entity current_in_order;
+};
+
+struct ActionCompleteSignal
+{
+    int cost;
+};
+
+struct Sight
+{
+    int radius;
+};
+
+struct FieldOfView
+{
+
+};
+
+struct NextTurnSignal
+{};
 
 struct Symbol
 {
@@ -103,7 +158,7 @@ struct XY
 {
     int8_t x, y;
 
-    inline float distance(XY& xy2)
+    inline float distance(const XY& xy2) const
     {
         float dx = ((float)x - (float)xy2.x);
         float dy = ((float)y - (float)xy2.y);

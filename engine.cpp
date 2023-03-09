@@ -121,6 +121,11 @@ void PoirogueEngine::quit()
 PoirogueEngine* PoirogueEngine::Instance = nullptr;
 std::unordered_map<size_t, Entity> Access::unique_resources = {};
 
+void AccessConsole::str(const Position& pt, std::string_view text, RGB fg)
+{
+    tcod::print(PoirogueEngine::Instance->tcod_console, (std::array<int, 2>&)pt, text, fg, std::nullopt);
+}
+
 void AccessConsole::ch(const Position& pt, std::string_view text)
 {
     tcod::print(PoirogueEngine::Instance->tcod_console, (std::array<int, 2>&)pt, text, std::nullopt, std::nullopt);
@@ -152,6 +157,13 @@ void AccessConsole::fg(const Position& pt, RGB color)
     {
         tcod::print(PoirogueEngine::Instance->tcod_console, pos, " ", color, std::nullopt);
     }
+}
+
+Entity AccessWorld_ModifyWorld::create_entity()
+{
+    auto e = PoirogueEngine::Instance->entt_world.create();
+    printf("CREATED #%d\n", (long)e);
+    return e;
 }
 
 AccessBackConsole::AccessBackConsole()

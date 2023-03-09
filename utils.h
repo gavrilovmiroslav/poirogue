@@ -7,7 +7,7 @@
 inline std::string codepoint_to_utf8(char32_t cp)
 {
     char buff[16];
-    snprintf(buff, sizeof(buff), "%c", cp);
+    snprintf(buff, sizeof(buff), "%s", (char *) & cp);
     std::string buffAsStdStr = buff;
 
     return buffAsStdStr;

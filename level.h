@@ -48,6 +48,7 @@ struct Level
     void force_connect();
     void flood_fill_regions();
     void generate();
+    void update_map_visibility();
 };
 
 struct PeopleMapping;
@@ -57,9 +58,9 @@ struct LevelCreationEvent {};
 
 struct LevelCreationSystem
     : public OneOffSystem
-    , public AccessWorld_Unique<Level>
-    , public AccessWorld_Unique<PeopleMapping>
-    , public AccessWorld_QueryByEntity<Person>
+    , public AccessWorld_UseUnique<Level>
+    , public AccessWorld_UseUnique<PeopleMapping>
+    , public AccessWorld_QueryAllEntitiesWith<Person>
     , public AccessEvents_Listen<KeyEvent>
     , public AccessEvents_Emit<LevelCreationEvent>
     , public AccessWorld_ModifyWorld
@@ -83,7 +84,7 @@ struct Debug_RoomLevelRenderSystem
     : public RuntimeSystem
     , public AccessConsole
     , public AccessEvents_Listen<KeyEvent>
-    , public AccessWorld_Unique<Level>
+    , public AccessWorld_UseUnique<Level>
 {
     Debug_RenderMode mode = Debug_RenderMode::Off;
 
@@ -93,17 +94,12 @@ struct Debug_RoomLevelRenderSystem
 };
 
 struct LevelRenderSystem
-    : public RuntimeSystem    
-    , public AccessConsole
-    , public AccessWorld_Unique<Level>
-{
-    void activate() override;
-};
-
-struct ShimmerRenderSystem
     : public RuntimeSystem
     , public AccessConsole
-    , public AccessWorld_Unique<Level>    
+    , public AccessWorld_QueryComponent<WorldPosition>
+    , public AccessWorld_QueryComponent<Sight>
+    , public AccessWorld_UseUnique<Level>
+    , public AccessWorld_QueryAllEntitiesWith<Player>
 {
     int tick;
 
