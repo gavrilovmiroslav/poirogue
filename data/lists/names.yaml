@@ -1,0 +1,276 @@
+female-names:
+  a:
+    - ASLAUG
+    - ALDA
+    - ANNIKA
+    - ASTA
+    - ARADIS
+  b:
+    - BERGLIND
+    - BRYNDIS
+    - BIRNA
+    - BIRTA
+    - BRYNHILD
+  c: 
+    - CLARA
+    - CHARLOTTA
+    - CECILIA
+    - CYNTHIA
+    - CAMILLA
+  d:
+    - DIS
+    - DORA
+    - DAGNY
+    - DISELLA
+    - DALLA
+  e:
+    - EDDA
+    - ELIN
+    - ELISABET
+    - EMBLA
+    - EYJA
+  f:
+    - FREYJA
+    - FANNEY
+    - FJOLA
+    - FRIDA
+    - FLORA
+  g:
+    - GUDRUN
+    - GEIRLAUG
+    - GUDLAUG
+    - GRETA
+    - GUNNHILDUR
+  h:
+    - HILDUR
+    - HEKLA
+    - HALLA
+    - HRONN
+    - HERA
+  i:
+    - INGA
+    - IRENA
+    - IRIS
+    - INDIANA
+    - ILMUR
+  j:
+    - JULIA
+    - JONA
+    - JORUNN
+    - JOFRIDUR
+    - JOKLA
+  k: 
+    - KATRIN
+    - KRISTIN
+    - KJARA
+    - KALI
+    - KOLBRUN
+  l:
+    - LILJA
+    - LOVISA
+    - LOA
+    - LAUFEY
+    - LIF
+  m:
+    - MAJA
+    - MAGDALENA
+    - MARIA
+    - MYRUN
+    - MARGARET
+  n:
+    - NADJA
+    - NANNA
+    - NUMI
+    - NINA
+    - NJALA
+  o:
+    - ODA
+    - OLGA
+    - OSK
+    - OPHELIA
+    - OLIVIA
+  p:
+    - PETRA
+    - PIA
+    - PORA
+    - PALINA
+    - PERNILLE
+  r:
+    - ROSA
+    - RAN
+    - ROBERTA
+    - RIKKA
+    - REBECCA
+  s:
+    - SOLEY
+    - SIGGA
+    - SALOME
+    - SARA
+    - SVAVA
+  t:
+    - TINNA
+    - TARA
+    - TIMEA
+    - THORUNN
+    - THELMA
+  w:
+    - WILMA
+    - WANDA
+    - WILHELMINA
+    - WREN
+    - WILLOW
+  v:
+    - VALA
+    - VIGDIS
+    - VAKA
+    - VERA
+    - VEBJORG
+  u:
+    - UNA
+    - URSULA
+    - ULFA
+    - UNNUR
+  y:
+    - YLFA
+    - YRSA
+    - YNDIRA
+    - YRPA
+    - YLVA
+  
+male-names:
+  a:
+    - ARNAR
+    - ASGEIR
+    - AGNAR
+    - ARI
+    - ALMAR
+  b:
+    - BJARNI
+    - BALDUR
+    - BRYNJAR
+    - BIRGIR
+    - BRAGI
+  c:
+    - CARL
+    - CHRISTOFFER
+    - CLEAS
+    - CAESAR
+    - CHRISTIAN
+  d:
+    - DAGUR
+    - DARRI
+    - DORI
+    - DANIEL
+    - DAVID
+  e:
+    - EINAR
+    - EGILL
+    - EMIL
+    - ERLENDUR
+    - EYSTEINN
+  f:
+    - FRIDRIK
+    - FINNUR
+    - FILIPPUS
+    - FANNAR
+    - FLOKI
+  g:
+    - GUNNAR
+    - GESTUR
+    - GRIMUS
+    - GISLI
+    - GARDAR
+  h:
+    - HALLUR
+    - HAUKUR
+    - HJALTI
+    - HANNES
+    - HELGI
+  i:
+    - INGVAR
+    - IVAR
+    - IDUNN
+    - INDRIDI
+    - ISAK
+  j:
+    - JON
+    - JOKULL
+    - JARI
+    - JOHANNA
+    - JOI
+  k:
+    - KRISTJAN
+    - KJARTAN
+    - KARI
+    - KOLBEINN
+    - KJELL
+  l:
+    - LEIFUR
+    - LARUS
+    - LOGI
+    - LUAVIK
+    - LARENT
+  m:
+    - MAGNUS
+    - MANI
+    - MATTHIAS
+    - MIKAEL
+    - MUNDI
+  n:
+    - NATAN
+    - NEFEL
+    - NJALL
+    - NORBERT
+    - NOTT
+  o:
+    - ORRI
+    - ORN
+    - ODDUR
+    - OLAFUR
+    - OFEIGOR
+  p:
+    - PALL
+    - PETUR
+    - PALMI
+    - POUL
+    - PER
+  r:
+    - RUNAR
+    - RAGNAR
+    - REYNIR
+    - RUTUS
+    - RASMUS
+  s:
+    - SVERRIR
+    - STEINAR
+    - SAEVAR
+    - STEFAN
+  t:
+    - TRYGGRI
+    - TUMI
+    - TEITUR
+    - TOMAS
+    - TRAUSTI
+  w:
+    - WALTER
+    - WILLIAM
+    - WERNER
+    - WALDEMAR
+    - WOLFGANG
+  v:
+    - VIKTOR
+    - VALUR
+    - VALTYR
+    - VIL
+    - VIDAR
+  u:
+    - ULFUR
+    - UNNAR
+    - UGGI
+    - ULLAR
+  y:
+    - YMIR
+    - YRKI
+    - YGGUR
+    - YNGVAR
+    - YRJOLFUR

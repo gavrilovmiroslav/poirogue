@@ -50,11 +50,50 @@ struct Name {
     std::string name;
 };
 
-struct Person {
+enum Sex {
+    Male,
+    Female,
+    MONALE,
+};
+
+enum PlaceKind {
+    FewWorkNoVisits,
+    FewWorkManyVisits,
+    ManyWorkFewVisits,
+    SomeWorkSomeVisit,
+    NoWorkOnlyVisit,
+    SomeVisits,
+};
+
+static const char* get_place_kind(PlaceKind kind)
+{
+    switch (kind)
+    {
+    case FewWorkNoVisits: return "few-work-no-visits";
+    case FewWorkManyVisits: return "few-work-many-visits";
+    case ManyWorkFewVisits: return "many-work-few-visits";
+    case SomeWorkSomeVisit: return "some-work-some-visit";
+    case NoWorkOnlyVisit: return "no-work-only-visit";
+    case SomeVisits: default: return "exceptional-visit";
+    }
+}
+
+struct Person 
+{
     int person_id;
 };
 
-struct Place { int place_id; };
+struct Place 
+{ 
+    int place_id;
+};
+
+struct Residents
+{
+    std::vector<int> working;
+    std::vector<int> living;
+    std::vector<int> visits;
+};
 
 struct WorksIn {};
 struct LivesIn {};
@@ -125,11 +164,6 @@ struct ActionCompleteSignal
 struct Sight
 {
     int radius;
-};
-
-struct FieldOfView
-{
-
 };
 
 struct NextTurnSignal

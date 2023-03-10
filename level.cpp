@@ -2,7 +2,9 @@
 
 #include "config.h"
 #include "common.h"
-#include "people.h"
+
+#include <unordered_map>
+#include <yaml-cpp/yaml.h>
 
 void Level::init()
 {
@@ -570,6 +572,157 @@ void Level::generate()
     update_map_visibility();
 }
 
+void populate_queues(YAML::Node places_yaml, std::unordered_map<std::string, PlaceWeightQueue>& queues)
+{
+    TCODRandom* rng = TCODRandom::getInstance();
+
+    for (auto key : {
+    "few-work-no-visits",
+    "few-work-many-visits",
+    "many-work-few-visits",
+    "some-work-some-visit",
+    "no-work-only-visit",
+    "exceptional-visit"
+        }) {
+        PlaceWeightQueue queue{};
+
+        for (auto pplace : places_yaml[key])
+        {            
+            for (auto place : pplace) {
+                auto key = place.first;
+                auto value = place.second;
+                queue.push({ key.as<std::string>(), value.as<int>() + rng->getInt(-5, 0) });
+            }
+        }
+        queues.insert({ std::string(key), queue });
+    }
+}
+
+PeopleMapping LevelCreationSystem::generate_people_graph() {
+    PeopleMapping map;
+
+    map.graph = std::shared_ptr<graphs::Graph>(new graphs::Graph());
+    auto& places = map.places;
+    auto& people = map.people;
+    auto& graph = map.graph;
+
+    TCODRandom* rng = TCODRandom::getInstance();
+    std::unordered_set<int> used_places;
+
+    Residents residents[REGION_COUNT] {};
+    for (int i = 0; i < REGION_COUNT; i++)
+    {
+        places[i] = graph->create_node();
+        graph->label_node(places[i], "place #" + std::to_string(i + 1));
+        graph->tag_node<Place>(places[i], i);        
+    }
+
+    for (int i = 0; i < PEOPLE_COUNT; i++)
+    {
+        people[i] = graph->create_node();
+        graph->tag_node<Person>(people[i], i);
+        graph->label_node(people[i], "person #" + std::to_string(i + 1));
+
+        int p = rng->getInt(0, REGION_COUNT - 1);
+        auto lives_in_arrow = graph->create_arrow(people[i], places[p]);
+        graph->label_edge(lives_in_arrow, "lives in");
+        residents[p].living.push_back(i);
+        graph->tag_edge<LivesIn>(lives_in_arrow);
+        used_places.insert(p);
+
+        p = rng->getInt(0, REGION_COUNT - 1);
+        auto works_in_arrow = graph->create_arrow(people[i], places[p]);
+        graph->label_edge(works_in_arrow, "works in");
+        residents[p].working.push_back(i);
+        graph->tag_edge<WorksIn>(lives_in_arrow);
+        used_places.insert(p);
+    }
+
+    int current_person = 0;
+    for (int j = 0; j < REGION_COUNT; j++)
+    {
+        if (used_places.count(j) > 0 || rng->getInt(0, 100) > 85) continue;
+        int ps = std::max(PEOPLE_COUNT - 1, 2 + rng->getInt(0, PEOPLE_COUNT - 1));
+
+        for (int i = 0; i < ps; i++)
+        {
+            auto uses_arrow = graph->create_arrow(people[current_person % PEOPLE_COUNT], places[j]);
+            graph->label_edge(uses_arrow, "visits");
+            graph->tag_edge<Visits>(uses_arrow);
+            residents[j].visits.push_back(current_person % PEOPLE_COUNT);
+            current_person++;
+        }
+    }
+
+    current_person = 0;
+    for (int j = 0; j < REGION_COUNT; j++)
+    {
+        if (rng->getInt(0, 100) > 95) continue;
+        int ps = std::max(PEOPLE_COUNT - 1, 2 + rng->getInt(0, PEOPLE_COUNT - 1));
+
+        for (int i = 0; i < ps; i++)
+        {
+            if (rng->getInt(0, 100) > 30) continue;
+            auto uses_arrow = graph->create_arrow(people[current_person % PEOPLE_COUNT], places[j]);
+            graph->label_edge(uses_arrow, "visits");
+            graph->tag_edge<Visits>(uses_arrow);
+            residents[j].visits.push_back((current_person * rng->getInt(1, 10)) % PEOPLE_COUNT);
+            current_person++;
+        }
+    }
+
+    std::unordered_map<std::string, PlaceWeightQueue> queues;
+    auto places_yaml = AccessYAML::load("data/lists/places.yaml");
+
+    populate_queues(places_yaml, queues);
+
+    for (int i = 0; i < REGION_COUNT; i++)
+    {
+        const int w = residents[i].working.size();
+        const int l = residents[i].living.size();
+        const int v = residents[i].visits.size();
+
+        auto kind = PlaceKind::SomeVisits;
+        if (w == 0 && v > 0)
+        {
+            kind = PlaceKind::NoWorkOnlyVisit;
+        }
+        else if (w > 0 && v == 0)
+        {
+            kind = PlaceKind::FewWorkNoVisits;
+        }
+        else if (w > 0 && v > 0 && v > 1.25f * w)
+        {
+            kind = PlaceKind::FewWorkManyVisits;
+        }
+        else if (w > 0 && v > 0 && w > 1.25f * v)
+        {
+            kind = PlaceKind::ManyWorkFewVisits;
+        }
+        else if (w > 0 && v > 0)
+        {
+            kind = PlaceKind::SomeWorkSomeVisit;
+        }
+
+        auto place_kind = std::string(get_place_kind(kind));
+        if (queues[place_kind].empty())
+        {
+            populate_queues(places_yaml, queues);
+        }
+
+        auto place = queues[place_kind].top();
+        queues[place_kind].pop();
+        auto value = std::get<0>(place);
+        auto prio = std::get<1>(place);
+        
+        printf("%d) W%d L%d V%d = %s (%s)\n", i, w, l, v, place_kind.c_str(), value.c_str());
+    }
+    
+    printf("-------------------");
+    //graph->print();
+
+    return map;
+}
 
 void LevelCreationSystem::generate()
 {
@@ -586,6 +739,12 @@ void LevelCreationSystem::generate()
 
     people_mapping = generate_people_graph();
 
+    auto names = AccessYAML::load("data/lists/names.yaml");
+
+    auto female_name_list = names["female-names"];
+    auto male_name_list = names["male-names"];
+    std::vector<char> letters{ 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'r', 's', 't', 'u', 'w', 'v', 'y' };
+    
     auto& level = AccessWorld_UseUnique<Level>::access_unique();
     for (auto person : people_mapping.people)
     {
@@ -604,17 +763,31 @@ void LevelCreationSystem::generate()
 
                 used_spaces.insert(TO_XY(tile.x, tile.y));
 
+                Sex sex = (rng->getInt(0, 101) >= 50 ? Sex::Female : Sex::Male);
+                
                 // create person
+                
                 auto person = AccessWorld_ModifyWorld::create_entity();
                 AccessWorld_ModifyEntity::add_component<Person>(person, person_id);
-                AccessWorld_ModifyEntity::add_component<Name>(person, "Person #" + std::to_string(person_id));
+                AccessWorld_ModifyEntity::add_component<Sex>(person, sex);
                 AccessWorld_ModifyEntity::add_component<Health>(person, 100, 100);
                 AccessWorld_ModifyEntity::add_component<ActionPoints>(person, 0);
                 AccessWorld_ModifyEntity::add_component<Speed>(person, rng->getInt(80, 110));
 
-                std::string s(1, 'A' + person_id);
-                AccessWorld_ModifyEntity::add_component<Symbol>(person, s);
-                AccessWorld_ModifyEntity::add_component<AIPlayer>(person);                
+                int letter_index = rng->getInt(0, letters.size() - 1);
+                char c = letters[letter_index];
+                std::string s_low(1, c);
+                letters.erase(letters.begin() + letter_index);
+
+                YAML::Node name_list = (sex == Sex::Female ? female_name_list : male_name_list)[s_low];
+                int name_index = rng->getInt(0, name_list.size() - 1);
+                auto name = name_list[name_index].as<std::string>();
+                name_list.remove(name_index);
+
+                std::string s_high(1, c - 32);
+                AccessWorld_ModifyEntity::add_component<Symbol>(person, s_high);
+                AccessWorld_ModifyEntity::add_component<Name>(person, name);
+                AccessWorld_ModifyEntity::add_component<AIPlayer>(person);
                 AccessWorld_ModifyEntity::add_component<WorldPosition>(person, (int)tile.x, (int)tile.y);
             }
         }
@@ -683,11 +856,12 @@ void Debug_RoomLevelRenderSystem::react_to_event(KeyEvent& signal)
 
 
 void LevelRenderSystem::activate()
-{
+{    
     tick++;
 
     TCODRandom* rng = TCODRandom::getInstance();
-    const auto& level = access_unique();
+    auto& level = AccessWorld_UseUnique<Level>::access_unique();
+    const auto& colors = AccessWorld_UseUnique<Colors>::access_unique();
 
     const auto player_entity = AccessWorld_QueryAllEntitiesWith<Player>::query().front();
     const auto& world_pos = AccessWorld_QueryComponent<WorldPosition>::get_component(player_entity);
@@ -709,37 +883,46 @@ void LevelRenderSystem::activate()
                 float dist_factor = 1.0f;
                 if (dist >= sight.radius * 0.9f)
                 {
-                    dist_factor = 0.35f;
+                    dist_factor = colors.visible_shift_very_far;
                 }
                 else if (dist >= sight.radius * 0.75f)
                 {
-                    dist_factor = 0.85f;
+                    dist_factor = colors.visible_shift_far;
                 }
                 else if (dist >= sight.radius * 0.5f)
                 {
-                    dist_factor = 0.95f;
+                    dist_factor = colors.visible_shift_mid;
                 }
 
                 if (level.dig[i][j] == ' ')
                 {
-                    AccessConsole::fg({ i, j }, HSL(255.0f, 0.3f, dist_factor));
+                    AccessConsole::fg({ i, j }, HSL(colors.visible_hue, colors.visible_sat, dist_factor));
                     AccessConsole::ch({ i, j }, "#");
                 }
                 else if (level.dig[i][j] == '*')
                 {
-                    auto time_factor = std::sin((i + j) * SHIMMER_STRIPE_WIDTH + tick * SHIMMER_STRIPE_SPEED);
-                    bg({ i, j }, HSL(SHIMMER_BASE_HUE + time_factor * SHIMMER_STRIPE_STRENGTH, 1.0f,
+                    auto time_factor = std::sin((i + j) * colors.shimmer_stripe_width + tick * colors.shimmer_stripe_speed);
+                    bg({ i, j }, HSL(colors.shimmer_hue + time_factor * colors.shimmer_stripe_strength, 1.0f,
                         rng->getFloat(0.95f, 1.0f) * (rad - xy.distance(ij)) / radius));
                     AccessConsole::fg({ i, j }, HSL(255.0f, 0.3f, 2 * (radius - xy.distance(ij)) / rad));
-
+                    level.memory[i][j] = '.';
                     ch({ i, j }, ".");
                 }
                 else
                 {
-                    AccessConsole::fg({ i, j }, HSL(255.0f, 0.3f, dist_factor));
+                    AccessConsole::fg({ i, j }, HSL(colors.visible_hue, colors.visible_sat, dist_factor));
                     std::string s(1, level.dig[i][j]);
+                    level.memory[i][j] = '.';
                     AccessConsole::ch({ i, j }, s);
                 }
+            }
+            else
+            {
+                AccessConsole::fg({ i, j }, HSL(colors.memory_hue, colors.memory_sat, colors.memory_lit));
+
+                std::string s(1, level.dig[i][j]);
+                s[0] = level.memory[i][j];
+                AccessConsole::ch({ i, j }, s);
             }
         }
     }

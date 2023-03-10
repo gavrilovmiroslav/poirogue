@@ -1,0 +1,15 @@
+---
+visible-hue: 255.0
+visible-sat: 0.5
+visible-shift-mid: 0.75
+visible-shift-far: 0.45
+visible-shift-very-far: 0.25
+
+memory-hue: 240.0
+memory-sat: 0.1
+memory-lit: 0.5
+
+shimmer-hue: 180.0
+shimmer-stripe-strength: 20.0
+shimmer-stripe-speed: 0.05
+shimmer-stripe-width: 0.25

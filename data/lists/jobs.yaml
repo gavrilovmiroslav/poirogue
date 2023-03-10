@@ -1,0 +1,85 @@
+---
+warehouse:
+  - STOCKER
+  - LOADER
+  - WORKER
+  - PACKER
+  - HANDLER  
+
+machine-shop:
+  - MACHINIST
+  - REPAIRMAN
+
+library:
+  - LIBRARIAN
+  - WRITER
+  - MONK
+
+cleric:
+  - CLERIC
+  - DOCTOR
+  - HEALER
+  - WITCH
+
+inn:
+  - OWNER
+  - BARTENDER
+
+church:
+  - PRIEST
+  - MINISTER
+  - PASTOR
+
+mess-hall:
+  - COOK
+  - CHEF
+  - SERGEANT
+
+gymnasium:    
+  - ADVISOR
+  - TUTOR
+  - TRAINER
+
+black-market:
+  - JACK
+  - TRADER
+
+mineshaft:
+  - MINER
+  - FOREMAN
+  - HEWER
+  - DRILLER
+  - BARROWMAN
+  - TIMBER
+  - HURRIER
+  - PUTTER
+  - LOADER
+  - WORKER    
+
+junkyard:
+  - SCRAPPER
+  - BREAKER
+  - SORTER
+  - LOADER 
+  - WORKER   
+
+foundry:
+  - OPERATIVE
+  - FOREMAN
+  - CASTER
+  - SHAKER
+  - WORKER
+
+skyport:
+  - SAILOR
+  - HAND
+  - OLD SALT
+  - MARINER
+
+market:
+  - SELLER
+  - VENDOR
+
+lounge:
+  - MASSEUR  
+  - CLERIC

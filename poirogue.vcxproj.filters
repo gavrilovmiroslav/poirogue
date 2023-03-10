@@ -27,9 +27,6 @@
     <ClCompile Include="level.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="people.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="time.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -57,9 +54,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="config.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="people.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="player.h">

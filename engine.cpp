@@ -5,6 +5,8 @@
 #include <sstream>
 
 #include <chrono>
+#include <yaml-cpp/yaml.h>
+
 using namespace std::chrono;
 
 PoirogueEngine::PoirogueEngine()
@@ -24,9 +26,9 @@ PoirogueEngine::PoirogueEngine()
     params.pixel_width = 1200;
     params.pixel_height = 780;
 
-    auto tileset = tcod::load_tilesheet("Taffer_10x10.png", { 16, 16 }, tcod::CHARMAP_CP437);
+    auto tileset = TCOD_tileset_load("data/fonts/classic_roguelike_white.png", 28, 8, 28 * 8, TCOD_CHARMAP_CP437);
     
-    params.tileset = tileset.get();
+    params.tileset = tileset;
 
     tcod_context = tcod::Context(params);
 
@@ -120,6 +122,11 @@ void PoirogueEngine::quit()
 
 PoirogueEngine* PoirogueEngine::Instance = nullptr;
 std::unordered_map<size_t, Entity> Access::unique_resources = {};
+
+YAML::Node AccessYAML::load(const char* name)
+{    
+    return YAML::LoadFile(name);
+}
 
 void AccessConsole::str(const Position& pt, std::string_view text, RGB fg)
 {

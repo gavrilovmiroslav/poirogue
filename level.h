@@ -4,6 +4,7 @@
 #include <unordered_set>
 #include <bitset>
 #include <libtcod.hpp>
+#include <queue>
 
 #include "config.h"
 #include "common.h"
@@ -16,6 +17,7 @@ struct Level
     
     float digability[WIDTH][HEIGHT] { 0.0f, };
     char dig[WIDTH][HEIGHT]{ ' ', };
+    char memory[WIDTH][HEIGHT]{ ' ', };
 
     char rooms[WIDTH][HEIGHT]{ ' ', };
     char regions[WIDTH][HEIGHT]{ ' ', };
@@ -65,12 +67,27 @@ struct LevelCreationSystem
     , public AccessEvents_Emit<LevelCreationEvent>
     , public AccessWorld_ModifyWorld
     , public AccessWorld_ModifyEntity
+    , public AccessYAML
 {
+    PeopleMapping generate_people_graph();
     void generate();
     void activate() override;
     void react_to_event(KeyEvent& signal) override;
 };
 
+using PlaceWeight = std::tuple<std::string, int>;
+
+struct PlaceWeightSort
+{
+    bool operator() (const PlaceWeight l, const PlaceWeight r)
+    {
+        auto lv = std::get<1>(l);
+        auto rv = std::get<1>(r);
+        return lv < rv;
+    }
+};
+
+using PlaceWeightQueue = std::priority_queue<PlaceWeight, std::vector<PlaceWeight>, PlaceWeightSort>;
 
 enum Debug_RenderMode
 {
@@ -96,9 +113,11 @@ struct Debug_RoomLevelRenderSystem
 struct LevelRenderSystem
     : public RuntimeSystem
     , public AccessConsole
+    , public AccessYAML
     , public AccessWorld_QueryComponent<WorldPosition>
     , public AccessWorld_QueryComponent<Sight>
     , public AccessWorld_UseUnique<Level>
+    , public AccessWorld_UseUnique<Colors>
     , public AccessWorld_QueryAllEntitiesWith<Player>
 {
     int tick;

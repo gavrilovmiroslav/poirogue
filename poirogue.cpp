@@ -7,7 +7,6 @@
 #include "level.h"
 #include "ai.h"
 #include "player.h"
-#include "people.h"
 #include "time.h"
 #include "cursor.h"
 #include "symbols.h"
@@ -22,6 +21,7 @@ int main(int argc, char* argv[])
     PoirogueEngine engine;
     engine.add_one_off_system<LevelCreationSystem>();
     engine.add_one_off_system<PlayerCreationSystem>();
+    engine.add_one_off_system<Debug_ReloadConfigSystem>();
     engine.add_one_off_system<TimeSystem>();
 
     auto interp = engine.add_one_off_system<CommandInterpretationSystem>();
@@ -34,7 +34,8 @@ int main(int argc, char* argv[])
     engine.add_runtime_system<PlayerChoiceSystem>();
     engine.add_runtime_system<AIChoiceSystem>();
     engine.add_runtime_system<Debug_RoomLevelRenderSystem>();
-    engine.add_runtime_system<Debug_TurnOrderSystem>();
+    engine.add_runtime_system<Debug_TurnOrderSystem>();    
+    engine.add_runtime_system<Debug_HintSystem>();
 
     engine.restart_game();
     

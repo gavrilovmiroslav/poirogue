@@ -21,7 +21,7 @@ void PlayerCreationSystem::react_to_event(LevelCreationEvent& signal)
 
     this->AccessWorld_ModifyEntity::add_tag_component<Player>(last_player_entity);
     this->AccessWorld_ModifyEntity::add_component<Health>(last_player_entity, 100, 100);
-    this->AccessWorld_ModifyEntity::add_component<Name>(last_player_entity, "Detective");
+    this->AccessWorld_ModifyEntity::add_component<Name>(last_player_entity, "DETECTIVE");
     this->AccessWorld_ModifyEntity::add_component<ActionPoints>(last_player_entity, 0);
     this->AccessWorld_ModifyEntity::add_component<Speed>(last_player_entity, ATTRIBUTE_SPEED_NORM);
     this->AccessWorld_ModifyEntity::add_component<Symbol>(last_player_entity, "@");
@@ -70,19 +70,39 @@ void PlayerChoiceSystem::react_to_event(KeyEvent& key)
 
         return;
 
-    case KeyCode::KEY_LEFT:
+    case KeyCode::KEY_A:
         dx = -1;
         break;
 
-    case KeyCode::KEY_RIGHT:
+    case KeyCode::KEY_D:
         dx = 1;
         break;
 
-    case KeyCode::KEY_UP:
+    case KeyCode::KEY_W:
         dy = -1;
         break;
 
-    case KeyCode::KEY_DOWN:
+    case KeyCode::KEY_S:
+        dy = 1;
+        break;
+
+    case KeyCode::KEY_Q:
+        dx = -1;
+        dy = -1;
+        break;
+
+    case KeyCode::KEY_E:
+        dx = 1;
+        dy = -1;
+        break;
+
+    case KeyCode::KEY_Z:
+        dx = -1;
+        dy = 1;
+        break;
+
+    case KeyCode::KEY_X: case KeyCode::KEY_C:
+        dx = 1;
         dy = 1;
         break;
     }

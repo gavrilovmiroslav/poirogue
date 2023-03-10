@@ -1,0 +1,33 @@
+---
+few-work-no-visits:
+  - warehouse: 3
+  - machine-shop: 3
+  - library: 0
+
+few-work-many-visits:
+  - cleric: 3
+  - inn: 4
+  - temple: 4
+  - mess-hall: 3
+  - gymnasium: -2
+
+many-work-few-visits: 
+  - mineshaft: 5
+  - junkyard: 4
+  - foundry: 4
+
+some-work-some-visit:
+  - skyport: 10
+  - lounge: 5
+  - market: 5
+
+no-work-only-visit:
+  - drinking-hole: 5
+  - shrine: 4
+  - abandoned-warehouse: 0
+  - black-market: -2
+
+exceptional-visit:
+  - monolith: 0
+  - hidden-bench: 0
+  - haunted-mine: 0

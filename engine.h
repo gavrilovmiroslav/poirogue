@@ -10,8 +10,6 @@
 #include "utils.h"
 #include "common.h"
 
-#include <cstdio>
-
 struct System 
 {
     virtual void activate() {}
@@ -132,6 +130,16 @@ struct AccessWorld_DirectRegistry
     {
         return PoirogueEngine::Instance->entt_world;
     }
+};
+
+namespace YAML
+{
+    class Node;
+}
+
+struct AccessYAML : public Access
+{
+    YAML::Node load(const char* name);
 };
 
 struct AccessConsole : public Access

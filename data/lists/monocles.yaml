@@ -1,0 +1,16 @@
+---
+monocles:
+	common-monocles:
+		- Health Reader
+		- Stat Reader
+		- Empathy Stare
+		- Cat Eye
+		- Detect(ive)
+	uncommon-monocles:
+		- Medusa's Monstare
+		- Mon frere Monstare
+		- Laser Scare Monstare
+	rare-monocles:
+		- Twin Monocles
+		- Truthsayer
+		- Ghostare
