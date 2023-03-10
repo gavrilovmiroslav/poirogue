@@ -15,12 +15,12 @@ struct Level
 {
     TCODMap* map;
     
-    float digability[WIDTH][HEIGHT] { 0.0f, };
-    char dig[WIDTH][HEIGHT]{ ' ', };
-    char memory[WIDTH][HEIGHT]{ ' ', };
+    float digability[SCREEN_WIDTH][SCREEN_HEIGHT] { 0.0f, };
+    char dig[SCREEN_WIDTH][SCREEN_HEIGHT]{ ' ', };
+    char memory[SCREEN_WIDTH][SCREEN_HEIGHT]{ ' ', };
 
-    char rooms[WIDTH][HEIGHT]{ ' ', };
-    char regions[WIDTH][HEIGHT]{ ' ', };
+    char rooms[SCREEN_WIDTH][SCREEN_HEIGHT]{ ' ', };
+    char regions[SCREEN_WIDTH][SCREEN_HEIGHT]{ ' ', };
 
     std::vector<XY> region_centers;
     std::vector<XY> region_tiles[REGION_COUNT];
@@ -29,9 +29,9 @@ struct Level
     std::vector<XY> tiles[ROOM_COUNT];
 
     std::vector<XY> walkable;
-    std::bitset<WIDTH * HEIGHT> flood_fill_visited;
-    std::bitset<WIDTH * HEIGHT> flood_fill_candidate;
-    std::bitset<WIDTH * HEIGHT> bombs;
+    std::bitset<SCREEN_WIDTH * SCREEN_HEIGHT> flood_fill_visited;
+    std::bitset<SCREEN_WIDTH * SCREEN_HEIGHT> flood_fill_candidate;
+    std::bitset<SCREEN_WIDTH * SCREEN_HEIGHT> bombs;
     std::vector<XY> exploded_bombs;
     graphs::Graph dig_plan;
 

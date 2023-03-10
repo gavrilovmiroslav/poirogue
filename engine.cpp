@@ -14,7 +14,7 @@ PoirogueEngine::PoirogueEngine()
 {
     PoirogueEngine::Instance = this;
 
-    tcod_console = tcod::Console{ WIDTH, HEIGHT };
+    tcod_console = tcod::Console{ SCREEN_WIDTH, SCREEN_HEIGHT };
     auto params = TCOD_ContextParams{};
 
     params.tcod_version = TCOD_COMPILEDVERSION;
@@ -175,7 +175,7 @@ Entity AccessWorld_ModifyWorld::create_entity()
 
 AccessBackConsole::AccessBackConsole()
 {
-    console = tcod::Console{ WIDTH, HEIGHT };
+    console = tcod::Console{ SCREEN_WIDTH, SCREEN_HEIGHT };
 }
 
 void AccessBackConsole::clear()

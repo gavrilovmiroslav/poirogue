@@ -12,9 +12,9 @@ void Level::init()
 
     exploded_bombs.clear();
 
-    for (int i = 0; i < WIDTH; i++)
+    for (int i = 0; i < MAP_WIDTH; i++)
     {
-        for (int j = 0; j < HEIGHT; j++)
+        for (int j = 0; j < MAP_HEIGHT; j++)
         {
             dig[i][j] = ' ';
             rooms[i][j] = ' ';
@@ -26,9 +26,9 @@ void Level::gradient()
 {
     TCODRandom* rng = TCODRandom::getInstance();
 
-    for (int i = 0; i < WIDTH; i++)
+    for (int i = 0; i < MAP_WIDTH; i++)
     {
-        for (int j = 0; j < HEIGHT; j++)
+        for (int j = 0; j < MAP_HEIGHT; j++)
         {
             dig[i][j] = ' ';
             digability[i][j] = rng->getFloat(0.0f, 1.0f, 0.5f);
@@ -40,15 +40,15 @@ void Level::gradient()
     for (int i = 0; i < 450; i++)
     {
         f *= 0.9991f;
-        int x = rng->getInt(5, WIDTH - 5);
-        int y = rng->getInt(5, HEIGHT - 5);
+        int x = rng->getInt(5, MAP_WIDTH - 5);
+        int y = rng->getInt(5, MAP_HEIGHT - 5);
 
         for (int i = -(int)radius; i < (int)radius; i++)
         {
             for (int j = -(int)radius; j < (int)radius; j++)
             {
-                if (x + i < 0 || x + i > WIDTH - 1) continue;
-                if (y + j < 0 || y + j > HEIGHT - 1) continue;
+                if (x + i < 0 || x + i > MAP_WIDTH - 1) continue;
+                if (y + j < 0 || y + j > MAP_HEIGHT - 1) continue;
 
                 digability[x + i][y + j] *= f;
             }
@@ -69,8 +69,8 @@ void Level::flood_fill(int bomb_count)
     bombs.reset();
     for (int i = 0; i < bomb_count; i++)
     {
-        int8_t x = rng->getInt(5, WIDTH - 5);
-        int8_t y = rng->getInt(5, HEIGHT - 5);
+        int8_t x = rng->getInt(5, MAP_WIDTH - 5);
+        int8_t y = rng->getInt(5, MAP_HEIGHT - 5);
         bombs.set(TO_XY(x, y));
     }
 
@@ -89,12 +89,12 @@ void Level::flood_fill(int bomb_count)
         for (int8_t i = -1; i < 2; i++)
         {
             if (next.x + i < 0) continue;
-            if (next.x + i >= WIDTH - 1) continue;
+            if (next.x + i >= MAP_WIDTH - 1) continue;
 
             for (int8_t j = -1; j < 2; j++)
             {
                 if (next.y + j < 0) continue;
-                if (next.y + j >= HEIGHT - 1) continue;
+                if (next.y + j >= MAP_HEIGHT - 1) continue;
 
                 if (i == 0 && j == 0) continue;
 
@@ -153,8 +153,8 @@ void Level::minesweep()
     int bomb_count = 10;
     for (int i = 0; i < dig_attempts; i++)
     {
-        auto x = (int8_t)rng->getInt(5, WIDTH - 5);
-        auto y = (int8_t)rng->getInt(5, HEIGHT - 5);
+        auto x = (int8_t)rng->getInt(5, MAP_WIDTH - 5);
+        auto y = (int8_t)rng->getInt(5, MAP_HEIGHT - 5);
         flood_fill_freelist.push_back(XY{ x, y });
         flood_fill(bomb_count);
         if (i % 3 == 0) bomb_count--;
@@ -189,17 +189,17 @@ void Level::connect()
     auto mst = dig_plan.get_minimum_spanning_tree();
 
     TCODRandom* rng = TCODRandom::getInstance();
-    map = new TCODMap(WIDTH, HEIGHT);
-    for (int i = 0; i < WIDTH; i++)
+    map = new TCODMap(MAP_WIDTH, MAP_HEIGHT);
+    for (int i = 0; i < MAP_WIDTH; i++)
     {
-        for (int j = 0; j < HEIGHT; j++)
+        for (int j = 0; j < MAP_HEIGHT; j++)
         {
             bool ok = rng->getFloat(0.0f, 1.0f) > 0.13f;
             map->setProperties(i, j, ok, ok);
         }
     }
 
-    auto d = TCOD_dijkstra_new_using_function(WIDTH, HEIGHT, [](int xFrom, int yFrom, int xTo, int yTo, void* user_data) -> float {
+    auto d = TCOD_dijkstra_new_using_function(MAP_WIDTH, MAP_HEIGHT, [](int xFrom, int yFrom, int xTo, int yTo, void* user_data) -> float {
         Level* level = (Level*)user_data;
         if (level->map->isWalkable(xTo, yTo))
         {
@@ -237,9 +237,9 @@ void Level::connect()
 void Level::cellular_automata()
 {
     // ovo ce da prodje ceo ekran
-    for (int i = 0; i < WIDTH; i++)
+    for (int i = 0; i < MAP_WIDTH; i++)
     {
-        for (int j = 0; j < HEIGHT; j++)
+        for (int j = 0; j < MAP_HEIGHT; j++)
         {
             if (dig[i][j] == ' ') continue;
 
@@ -256,8 +256,8 @@ void Level::cellular_automata()
 
                     if (x < 0) continue;
                     if (y < 0) continue;
-                    if (x >= WIDTH) continue;
-                    if (y >= HEIGHT) continue;
+                    if (x >= MAP_WIDTH) continue;
+                    if (y >= MAP_HEIGHT) continue;
 
                     if (dig[x][y] != ' ')
                     {
@@ -298,12 +298,12 @@ void Level::flood_fill_rooms(int start_x, int start_y, char current_room)
         for (int8_t i = -1; i < 2; i++)
         {
             if (next.x + i < 0) continue;
-            if (next.x + i >= WIDTH - 1) continue;
+            if (next.x + i >= MAP_WIDTH - 1) continue;
 
             for (int8_t j = -1; j < 2; j++)
             {
                 if (next.y + j < 0) continue;
-                if (next.y + j >= HEIGHT - 1) continue;
+                if (next.y + j >= MAP_HEIGHT - 1) continue;
 
                 if (i == 0 && j == 0) continue;
 
@@ -335,18 +335,18 @@ void Level::room_counting()
         tiles_in_room[i] = 0;
     }
 
-    for (int i = 0; i < WIDTH; i++)
+    for (int i = 0; i < MAP_WIDTH; i++)
     {
-        for (int j = 0; j < HEIGHT; j++)
+        for (int j = 0; j < MAP_HEIGHT; j++)
         {
             rooms[i][j] = ' ';
         }
     }
 
     char current_room = '1';
-    for (int i = 0; i < WIDTH; i++)
+    for (int i = 0; i < MAP_WIDTH; i++)
     {
-        for (int j = 0; j < HEIGHT; j++)
+        for (int j = 0; j < MAP_HEIGHT; j++)
         {
             if (dig[i][j] != ' ' && rooms[i][j] == ' ')
             {
@@ -360,9 +360,9 @@ void Level::room_counting()
     {
         if (tiles_in_room[n] < MIN_TILES_PER_ROOM)
         {
-            for (int i = 0; i < WIDTH; i++)
+            for (int i = 0; i < MAP_WIDTH; i++)
             {
-                for (int j = 0; j < HEIGHT; j++)
+                for (int j = 0; j < MAP_HEIGHT; j++)
                 {
                     if (rooms[i][j] == (char)(n + '1'))
                     {
@@ -412,16 +412,16 @@ void Level::force_connect()
     auto mst = dig_plan.get_minimum_spanning_tree();
 
     TCODRandom* rng = TCODRandom::getInstance();
-    map = new TCODMap(WIDTH, HEIGHT);
-    for (int i = 0; i < WIDTH; i++)
+    map = new TCODMap(MAP_WIDTH, MAP_HEIGHT);
+    for (int i = 0; i < MAP_WIDTH; i++)
     {
-        for (int j = 0; j < HEIGHT; j++)
+        for (int j = 0; j < MAP_HEIGHT; j++)
         {
             map->setProperties(i, j, true, true);
         }
     }
 
-    auto d = TCOD_dijkstra_new_using_function(WIDTH, HEIGHT, [](int xFrom, int yFrom, int xTo, int yTo, void* user_data) -> float {
+    auto d = TCOD_dijkstra_new_using_function(MAP_WIDTH, MAP_HEIGHT, [](int xFrom, int yFrom, int xTo, int yTo, void* user_data) -> float {
         Level* level = (Level*)user_data;
         if (level->map->isWalkable(xTo, yTo))
         {
@@ -468,9 +468,9 @@ void Level::flood_fill_regions()
         region_tiles[i].clear();
     }
 
-    for (int i = 0; i < WIDTH; i++)
+    for (int i = 0; i < MAP_WIDTH; i++)
     {
-        for (int j = 0; j < HEIGHT; j++)
+        for (int j = 0; j < MAP_HEIGHT; j++)
         {
             regions[i][j] = ' ';
         }
@@ -544,9 +544,9 @@ void Level::flood_fill_regions()
 
 void Level::update_map_visibility()
 {
-    for (int i = 0; i < WIDTH; i++)
+    for (int i = 0; i < MAP_WIDTH; i++)
     {
-        for (int j = 0; j < HEIGHT; j++)
+        for (int j = 0; j < MAP_HEIGHT; j++)
         {
             map->setProperties(i, j, dig[i][j] != ' ', dig[i][j] != ' ');
         }
@@ -625,7 +625,7 @@ PeopleMapping LevelCreationSystem::generate_people_graph() {
 
         int p = rng->getInt(0, REGION_COUNT - 1);
         auto lives_in_arrow = graph->create_arrow(people[i], places[p]);
-        graph->label_edge(lives_in_arrow, "lives in");
+        graph->label_edge(lives_in_arrow, "lives near");
         residents[p].living.push_back(i);
         graph->tag_edge<LivesIn>(lives_in_arrow);
         used_places.insert(p);
@@ -673,6 +673,7 @@ PeopleMapping LevelCreationSystem::generate_people_graph() {
 
     std::unordered_map<std::string, PlaceWeightQueue> queues;
     auto places_yaml = AccessYAML::load("data/lists/places.yaml");
+    auto jobs_yaml = AccessYAML::load("data/lists/jobs.yaml");
 
     populate_queues(places_yaml, queues);
 
@@ -691,11 +692,11 @@ PeopleMapping LevelCreationSystem::generate_people_graph() {
         {
             kind = PlaceKind::FewWorkNoVisits;
         }
-        else if (w > 0 && v > 0 && v > 1.25f * w)
+        else if (w > 0 && v > 0 && v > rng->getFloat(1.0f, 2.0f) * w)
         {
             kind = PlaceKind::FewWorkManyVisits;
         }
-        else if (w > 0 && v > 0 && w > 1.25f * v)
+        else if (w > 0 && v > 0 && w > rng->getFloat(1.0f, 2.0f) * v)
         {
             kind = PlaceKind::ManyWorkFewVisits;
         }
@@ -708,6 +709,7 @@ PeopleMapping LevelCreationSystem::generate_people_graph() {
         if (queues[place_kind].empty())
         {
             populate_queues(places_yaml, queues);
+            assert(!queues[place_kind].empty());
         }
 
         auto place = queues[place_kind].top();
@@ -715,12 +717,20 @@ PeopleMapping LevelCreationSystem::generate_people_graph() {
         auto value = std::get<0>(place);
         auto prio = std::get<1>(place);
         
+        auto job_roles = jobs_yaml[value];
+
+        std::transform(value.begin(), value.end(), value.begin(), ::toupper);
         printf("%d) W%d L%d V%d = %s (%s)\n", i, w, l, v, place_kind.c_str(), value.c_str());
+        graph->label_node(places[i], value);
+
+        for (auto res : residents[i].working)
+        {
+            auto job_role_index = rng->getInt(0, job_roles.size() - 1);
+            graph->tag_node<Job>(people[res], job_roles[job_role_index].as<std::string>());
+        }
     }
     
-    printf("-------------------");
-    //graph->print();
-
+    printf("-------------------\n");
     return map;
 }
 
@@ -767,13 +777,15 @@ void LevelCreationSystem::generate()
                 
                 // create person
                 
-                auto person = AccessWorld_ModifyWorld::create_entity();
-                AccessWorld_ModifyEntity::add_component<Person>(person, person_id);
-                AccessWorld_ModifyEntity::add_component<Sex>(person, sex);
-                AccessWorld_ModifyEntity::add_component<Health>(person, 100, 100);
-                AccessWorld_ModifyEntity::add_component<ActionPoints>(person, 0);
-                AccessWorld_ModifyEntity::add_component<Speed>(person, rng->getInt(80, 110));
+                auto game_person = AccessWorld_ModifyWorld::create_entity();
+                AccessWorld_ModifyEntity::add_component<Person>(game_person, person_id);
+                AccessWorld_ModifyEntity::add_component<Sex>(game_person, sex);
+                AccessWorld_ModifyEntity::add_component<Health>(game_person, 100, 100);
+                AccessWorld_ModifyEntity::add_component<ActionPoints>(game_person, 0);
+                AccessWorld_ModifyEntity::add_component<Speed>(game_person, rng->getInt(80, 110));
 
+                auto job = people_mapping.graph->get_tag<Job>(person).role;
+                AccessWorld_ModifyEntity::add_component<Job>(game_person, job);
                 int letter_index = rng->getInt(0, letters.size() - 1);
                 char c = letters[letter_index];
                 std::string s_low(1, c);
@@ -783,15 +795,18 @@ void LevelCreationSystem::generate()
                 int name_index = rng->getInt(0, name_list.size() - 1);
                 auto name = name_list[name_index].as<std::string>();
                 name_list.remove(name_index);
+                people_mapping.graph->label_node(person, name + "(" + job + ")");
 
                 std::string s_high(1, c - 32);
-                AccessWorld_ModifyEntity::add_component<Symbol>(person, s_high);
-                AccessWorld_ModifyEntity::add_component<Name>(person, name);
-                AccessWorld_ModifyEntity::add_component<AIPlayer>(person);
-                AccessWorld_ModifyEntity::add_component<WorldPosition>(person, (int)tile.x, (int)tile.y);
+                AccessWorld_ModifyEntity::add_component<Symbol>(game_person, s_high);
+                AccessWorld_ModifyEntity::add_component<Name>(game_person, name);
+                AccessWorld_ModifyEntity::add_component<AIPlayer>(game_person);
+                AccessWorld_ModifyEntity::add_component<WorldPosition>(game_person, (int)tile.x, (int)tile.y);
             }
         }
     }
+
+    people_mapping.graph->print();
 }
 
 void LevelCreationSystem::activate()
@@ -802,7 +817,7 @@ void LevelCreationSystem::activate()
 
 void LevelCreationSystem::react_to_event(KeyEvent& signal)
 {
-    if (signal.key == KeyCode::KEY_SPACE)
+    if (signal.key == KeyCode::KEY_F3)
     {
         generate();
         AccessEvents_Emit<LevelCreationEvent>::emit_event();
@@ -848,7 +863,7 @@ void Debug_RoomLevelRenderSystem::activate()
 
 void Debug_RoomLevelRenderSystem::react_to_event(KeyEvent& signal)
 {
-    if (signal.key == KeyCode::KEY_TAB)
+    if (signal.key == KeyCode::KEY_F4)
     {
         mode = (Debug_RenderMode)(((int)mode + 1) % Debug_RenderMode::COUNT);
     }

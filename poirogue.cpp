@@ -11,6 +11,7 @@
 #include "cursor.h"
 #include "symbols.h"
 #include "debug.h"
+#include "hud.h"
 
 #include "command_interp.h"
 
@@ -36,6 +37,7 @@ int main(int argc, char* argv[])
     engine.add_runtime_system<Debug_RoomLevelRenderSystem>();
     engine.add_runtime_system<Debug_TurnOrderSystem>();    
     engine.add_runtime_system<Debug_HintSystem>();
+    engine.add_runtime_system<HUDSystem>();
 
     engine.restart_game();
     

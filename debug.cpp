@@ -6,7 +6,7 @@
 
 void Debug_TurnOrderSystem::react_to_event(KeyEvent& signal)
 {
-	if (signal.key == KeyCode::KEY_1)
+	if (signal.key == KeyCode::KEY_F1)
 	{
 		visible = !visible;
 	}
@@ -49,10 +49,9 @@ void Debug_TurnOrderSystem::activate()
 	}
 }
 
-
 void Debug_ReloadConfigSystem::react_to_event(KeyEvent& signal)
 {
-	if (signal.key == KeyCode::KEY_2)
+	if (signal.key == KeyCode::KEY_F2)
 	{
 		auto& colors = AccessWorld_UseUnique<Colors>::access_unique();
 		auto yaml_colors = AccessYAML::load("data/lists/colors.yaml");
@@ -74,8 +73,7 @@ void Debug_ReloadConfigSystem::react_to_event(KeyEvent& signal)
 	}
 }
 
-
 void Debug_HintSystem::activate()
 {
-	str({ 0, 0 }, "DEBUG --   [1] TURN ORDER     [2] RELOAD COLORS    ", "#ff0000"_rgb);
+	str({ 0, 0 }, " [F1: TURN ORDER] [F2: RELOAD COLORS] [F3: NEW WORLD] [F4: LAYERS]", "#ff0000"_rgb);
 }

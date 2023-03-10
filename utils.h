@@ -70,6 +70,11 @@ struct HSL
         : h(0.0f), s(0.0f), l(0.0f)
     {}
 
+    HSL operator*(float dl)
+    {
+        return HSL(h, s, l * dl);
+    }
+
     operator TCOD_ColorRGB()
     {
         return TCOD_color_HSV(h, s, l);

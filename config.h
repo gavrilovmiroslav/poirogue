@@ -1,8 +1,12 @@
 #pragma once
 
+// screen width/height
+#define SCREEN_WIDTH 80
+#define SCREEN_HEIGHT 52
+
 // map width/height
-#define WIDTH 80
-#define HEIGHT 52
+#define MAP_WIDTH 80
+#define MAP_HEIGHT 44
 
 // room config
 #define ROOM_COUNT 20
@@ -18,6 +22,12 @@
 
 #define ATTRIBUTE_SPEED_NORM 100
 #define ATTRIBUTE_SIGHT_NORM 20
+
+// inventory
+#define INVENTORY_SIZE 6
+#define MONO_SYM '%'
+#define RING_SYM ('&' + 1)
+#define EYEDROP_SYM (']' + 4)
 
 struct Colors
 {

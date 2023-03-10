@@ -128,6 +128,11 @@ struct Speed
     int speed;
 };
 
+struct Job
+{
+    std::string role;
+};
+
 struct ActionPoints
 {
     int ap;
@@ -166,6 +171,16 @@ struct Sight
     int radius;
 };
 
+struct Item
+{
+    std::string name;
+};
+
+struct Inventory
+{
+    Entity stuff[INVENTORY_SIZE];
+};
+
 struct NextTurnSignal
 {};
 
@@ -186,7 +201,7 @@ struct WorldPosition
     int y;
 };
 
-#define TO_XY(x, y) ((int)x + WIDTH * (int)y)
+#define TO_XY(x, y) ((int)x + MAP_WIDTH * (int)y)
 
 struct XY
 {

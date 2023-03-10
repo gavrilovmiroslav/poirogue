@@ -6,7 +6,7 @@ warehouse:
   - PACKER
   - HANDLER  
 
-machine-shop:
+machine shop:
   - MACHINIST
   - REPAIRMAN
 
@@ -25,12 +25,12 @@ inn:
   - OWNER
   - BARTENDER
 
-church:
+temple:
   - PRIEST
   - MINISTER
   - PASTOR
 
-mess-hall:
+mess hall:
   - COOK
   - CHEF
   - SERGEANT
@@ -40,7 +40,7 @@ gymnasium:
   - TUTOR
   - TRAINER
 
-black-market:
+black market:
   - JACK
   - TRADER
 
@@ -83,3 +83,4 @@ market:
 lounge:
   - MASSEUR  
   - CLERIC
+

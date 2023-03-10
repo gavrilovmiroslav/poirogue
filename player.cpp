@@ -9,24 +9,55 @@ void PlayerCreationSystem::react_to_event(LevelCreationEvent& signal)
 {
     if (last_player_entity != entt::null)
     {
-        AccessWorld_ModifyWorld::destroy_entity(last_player_entity);
+        destroy_entity(last_player_entity);
     }
 
     TCODRandom* rng = TCODRandom::getInstance();
-    last_player_entity = AccessWorld_ModifyWorld::create_entity();
+    last_player_entity = create_entity();
 
     const auto& level = AccessWorld_UseUnique<Level>::access_unique();
     const auto size = level.walkable.size();
     const auto pos = level.walkable[rng->getInt(0, size)];
 
-    this->AccessWorld_ModifyEntity::add_tag_component<Player>(last_player_entity);
-    this->AccessWorld_ModifyEntity::add_component<Health>(last_player_entity, 100, 100);
-    this->AccessWorld_ModifyEntity::add_component<Name>(last_player_entity, "DETECTIVE");
-    this->AccessWorld_ModifyEntity::add_component<ActionPoints>(last_player_entity, 0);
-    this->AccessWorld_ModifyEntity::add_component<Speed>(last_player_entity, ATTRIBUTE_SPEED_NORM);
-    this->AccessWorld_ModifyEntity::add_component<Symbol>(last_player_entity, "@");
-    this->AccessWorld_ModifyEntity::add_component<WorldPosition>(last_player_entity, pos.x, pos.y);
-    auto& sight = this->AccessWorld_ModifyEntity::add_component<Sight>(last_player_entity, ATTRIBUTE_SIGHT_NORM);
+    add_tag_component<Player>(last_player_entity);
+    add_component<Health>(last_player_entity, 100, 100);
+    add_component<Name>(last_player_entity, "DETECTIVE");
+    add_component<ActionPoints>(last_player_entity, 0);
+    add_component<Speed>(last_player_entity, ATTRIBUTE_SPEED_NORM);
+    add_component<Symbol>(last_player_entity, "@");
+    add_component<WorldPosition>(last_player_entity, pos.x, pos.y);
+    auto& inventory = add_component<Inventory>(last_player_entity);
+
+    for (int i = 0; i < INVENTORY_SIZE; i++)
+    {
+        inventory.stuff[i] = entt::null;
+    }
+
+    {
+        auto item_entity = create_entity();
+        add_component<Item>(item_entity, "TRUTHSAYER MONOCLE");
+        std::string s(1, MONO_SYM);
+        add_component<Symbol>(item_entity, s);
+        inventory.stuff[0] = item_entity;
+    }
+    
+    {
+        auto item_entity = create_entity();
+        add_component<Item>(item_entity, "RING OF GLAMOR");
+        std::string s(1, RING_SYM);
+        add_component<Symbol>(item_entity, s);
+        inventory.stuff[1] = item_entity;
+    }
+
+    {
+        auto item_entity = create_entity();
+        add_component<Item>(item_entity, "EYEDROPS OF BARTER");
+        std::string s(1, EYEDROP_SYM);
+        add_component<Symbol>(item_entity, s);
+        inventory.stuff[2] = item_entity;
+    }
+
+    auto& sight = add_component<Sight>(last_player_entity, ATTRIBUTE_SIGHT_NORM);
 
     level.map->computeFov(pos.x, pos.y, sight.radius, true, FOV_RESTRICTIVE);
 }
