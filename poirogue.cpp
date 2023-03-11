@@ -17,6 +17,25 @@
 
 #undef main
 
+struct BlockMovementThroughPeopleSystem
+    : public OneOffSystem
+    , public AccessEvents_Listen<CommandSignal>
+    , public AccessWorld_UseUnique<Level>
+    , public AccessWorld_UseUnique<CommandContext>
+{
+    void react_to_event(CommandSignal& signal)
+    {
+        auto& level = AccessWorld_UseUnique<Level>::access_unique();
+        auto& context = AccessWorld_UseUnique<CommandContext>::access_unique();
+
+        if (context.cancelled) return;
+
+//        level.
+//        if (interpreters.find(signal.type) != interpreters.end())
+//            interpreters[signal.type]->interpret_command(context, signal);
+    }
+};
+
 int main(int argc, char* argv[])
 {
     PoirogueEngine engine;
@@ -28,8 +47,11 @@ int main(int argc, char* argv[])
     engine.add_one_off_system<Debug_ReloadConfigSystem>();
     engine.add_one_off_system<TimeSystem>();
 
+
+    engine.add_one_off_system<BlockMovementThroughPeopleSystem>();
+
     auto interp = engine.add_one_off_system<CommandInterpretationSystem>();
-    interp->add_interpreter<CommandType::Wait>(new WaitCommandInterpreter);
+    interp->add_interpreter<CommandType::Wait>(new WaitCommandInterpreter);    
     interp->add_interpreter<CommandType::Move>(new MoveCommandInterpreter);
 
     engine.add_runtime_system<LevelRenderSystem>();

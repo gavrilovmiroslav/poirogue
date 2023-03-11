@@ -71,10 +71,10 @@ struct LevelCreationSystem
     , public AccessWorld_ModifyEntity
     , public AccessYAML
 {
-    std::vector<SocialInteraction> social_interactions;
+    std::vector<SocialInteraction> social_interactions;    
 
-    PeopleMapping generate_people_graph();
-    void generate_crime_graph(PeopleMapping& peopleMapping);
+    void generate_people_graph();
+    void generate_crime_graph();
     void generate();
     void activate() override;
     void react_to_event(KeyEvent& signal) override;
