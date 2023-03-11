@@ -138,21 +138,40 @@ namespace graphs
     struct Graph;
 }
 
+using PersonEntity = Entity;
+using PlaceEntity = Entity;
+
+struct PersonPlaceHash
+{
+    size_t operator()(const std::tuple<PersonEntity, PlaceEntity>& x) const
+    {
+        return (size_t)std::get<0>(x) ^ (size_t)std::get<1>(x);
+    }
+};
+
 struct PeopleMapping
 {
     Residents residents[REGION_COUNT]{};
     Entity people[PEOPLE_COUNT + 1];
     Entity places[REGION_COUNT];
     Entity events[EVENT_COUNT];
+
+    Entity killer = entt::null;
+
     std::shared_ptr<graphs::Graph> graph;
 
     Entity get_victim() { return people[PEOPLE_COUNT]; }
 
     std::vector<Entity> get_all_places_shuffled();
     std::vector<Entity> get_all_people_shuffled();
-    std::vector<Entity> get_all_visiting_with(Entity visitor, bool with_victim = false);
-    std::vector<Entity> get_all_working_with(Entity visitor, bool with_victim = false);
-    std::vector<Entity> get_all_living_with(Entity visitor, bool with_victim = false);
+    std::vector<std::tuple<PersonEntity, PlaceEntity>> get_all_visiting_with(Entity visitor, bool with_victim = false);
+    std::vector<std::tuple<PersonEntity, PlaceEntity>> get_all_working_with(Entity visitor, bool with_victim = false);
+    std::vector<std::tuple<PersonEntity, PlaceEntity>> get_all_living_with(Entity visitor, bool with_victim = false);
+    std::vector<std::tuple<PersonEntity, PlaceEntity>> get_all_related_with(Entity visitor, bool with_victim = false);
+
+    Entity create_topic(std::string label, int event_id);
+    Entity create_event(std::string label, int time, int event_id);
+    void connect(Entity a, Entity b, std::string label, int event_id);
 };
 
 struct CurrentInTurn
@@ -179,6 +198,18 @@ struct ActionPoints
 {
     int ap;
 };
+
+enum CaseElement
+{
+    TOPIC,
+    EVENT,
+};
+
+struct CaseEvent
+{
+    int id;
+};
+
 
 using TurnOrder = std::tuple<ActionPoints, Speed, Entity>;
 

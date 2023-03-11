@@ -23,6 +23,7 @@ int main(int argc, char* argv[])
     auto level_creation = engine.add_one_off_system<LevelCreationSystem>();
     level_creation->social_interactions.push_back(murder_old_grievance_revenge);
     level_creation->social_interactions.push_back(murder_debt_scare);
+
     engine.add_one_off_system<PlayerCreationSystem>();
     engine.add_one_off_system<Debug_ReloadConfigSystem>();
     engine.add_one_off_system<TimeSystem>();

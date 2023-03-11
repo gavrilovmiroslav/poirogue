@@ -58,8 +58,7 @@ struct PeopleMapping;
 struct Person;
 
 struct LevelCreationEvent {};
-
-using SocialInteraction = std::function<void(PeopleMapping&, bool)>;
+using SocialInteraction = std::function<void(PeopleMapping&, int, Entity, bool)>;
 
 struct LevelCreationSystem
     : public OneOffSystem
