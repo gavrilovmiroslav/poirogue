@@ -594,13 +594,13 @@ void populate_queues(YAML::Node places_yaml, std::unordered_map<std::string, Pla
                 queue.push({ key.as<std::string>(), value.as<int>() + rng->getInt(-5, 0) });
             }
         }
+        queues.erase(key);
         queues.insert({ std::string(key), queue });
     }
 }
 
 PeopleMapping LevelCreationSystem::generate_people_graph() {
     PeopleMapping map;
-
     map.graph = std::shared_ptr<graphs::Graph>(new graphs::Graph());
     auto& places = map.places;
     auto& people = map.people;
@@ -608,8 +608,7 @@ PeopleMapping LevelCreationSystem::generate_people_graph() {
 
     TCODRandom* rng = TCODRandom::getInstance();
     std::unordered_set<int> used_places;
-
-    Residents residents[REGION_COUNT] {};
+   
     for (int i = 0; i < REGION_COUNT; i++)
     {
         places[i] = graph->create_node();
@@ -617,7 +616,7 @@ PeopleMapping LevelCreationSystem::generate_people_graph() {
         graph->tag_node<Place>(places[i], i);        
     }
 
-    for (int i = 0; i < PEOPLE_COUNT; i++)
+    for (int i = 0; i < PEOPLE_COUNT + 1; i++)
     {
         people[i] = graph->create_node();
         graph->tag_node<Person>(people[i], i);
@@ -626,14 +625,14 @@ PeopleMapping LevelCreationSystem::generate_people_graph() {
         int p = rng->getInt(0, REGION_COUNT - 1);
         auto lives_in_arrow = graph->create_arrow(people[i], places[p]);
         graph->label_edge(lives_in_arrow, "lives near");
-        residents[p].living.push_back(i);
+        map.residents[p].living.push_back(i);
         graph->tag_edge<LivesIn>(lives_in_arrow);
         used_places.insert(p);
 
         p = rng->getInt(0, REGION_COUNT - 1);
         auto works_in_arrow = graph->create_arrow(people[i], places[p]);
         graph->label_edge(works_in_arrow, "works in");
-        residents[p].working.push_back(i);
+        map.residents[p].working.push_back(i);
         graph->tag_edge<WorksIn>(lives_in_arrow);
         used_places.insert(p);
     }
@@ -649,7 +648,7 @@ PeopleMapping LevelCreationSystem::generate_people_graph() {
             auto uses_arrow = graph->create_arrow(people[current_person % PEOPLE_COUNT], places[j]);
             graph->label_edge(uses_arrow, "visits");
             graph->tag_edge<Visits>(uses_arrow);
-            residents[j].visits.push_back(current_person % PEOPLE_COUNT);
+            map.residents[j].visits.push_back(current_person % PEOPLE_COUNT);
             current_person++;
         }
     }
@@ -658,18 +657,20 @@ PeopleMapping LevelCreationSystem::generate_people_graph() {
     for (int j = 0; j < REGION_COUNT; j++)
     {
         if (rng->getInt(0, 100) > 95) continue;
-        int ps = std::max(PEOPLE_COUNT - 1, 2 + rng->getInt(0, PEOPLE_COUNT - 1));
+        int ps = std::max(PEOPLE_COUNT, 2 + rng->getInt(0, PEOPLE_COUNT));
 
         for (int i = 0; i < ps; i++)
         {
             if (rng->getInt(0, 100) > 30) continue;
-            auto uses_arrow = graph->create_arrow(people[current_person % PEOPLE_COUNT], places[j]);
+            auto uses_arrow = graph->create_arrow(people[current_person % (PEOPLE_COUNT + 1)], places[j]);
             graph->label_edge(uses_arrow, "visits");
             graph->tag_edge<Visits>(uses_arrow);
-            residents[j].visits.push_back((current_person * rng->getInt(1, 10)) % PEOPLE_COUNT);
+            map.residents[j].visits.push_back((current_person * rng->getInt(1, 10)) % (PEOPLE_COUNT + 1));
             current_person++;
         }
     }
+    
+    graph->label_node(map.people[PEOPLE_COUNT], "victim");
 
     std::unordered_map<std::string, PlaceWeightQueue> queues;
     auto places_yaml = AccessYAML::load("data/lists/places.yaml");
@@ -679,9 +680,9 @@ PeopleMapping LevelCreationSystem::generate_people_graph() {
 
     for (int i = 0; i < REGION_COUNT; i++)
     {
-        const int w = residents[i].working.size();
-        const int l = residents[i].living.size();
-        const int v = residents[i].visits.size();
+        const int w = map.residents[i].working.size();
+        const int l = map.residents[i].living.size();
+        const int v = map.residents[i].visits.size();
 
         auto kind = PlaceKind::SomeVisits;
         if (w == 0 && v > 0)
@@ -723,7 +724,7 @@ PeopleMapping LevelCreationSystem::generate_people_graph() {
         printf("%d) W%d L%d V%d = %s (%s)\n", i, w, l, v, place_kind.c_str(), value.c_str());
         graph->label_node(places[i], value);
 
-        for (auto res : residents[i].working)
+        for (auto res : map.residents[i].working)
         {
             auto job_role_index = rng->getInt(0, job_roles.size() - 1);
             graph->tag_node<Job>(people[res], job_roles[job_role_index].as<std::string>());
@@ -732,6 +733,15 @@ PeopleMapping LevelCreationSystem::generate_people_graph() {
     
     printf("-------------------\n");
     return map;
+}
+
+void LevelCreationSystem::generate_crime_graph(PeopleMapping& peopleMapping) 
+{
+    TCODRandom* rng = TCODRandom::getInstance();
+
+    int murder_index = rng->getInt(0, social_interactions.size() - 1);
+    for (int i = 0; i < social_interactions.size(); i++)
+        social_interactions[i](peopleMapping, i == murder_index);
 }
 
 void LevelCreationSystem::generate()
@@ -748,6 +758,7 @@ void LevelCreationSystem::generate()
     AccessWorld_ModifyWorld::destroy_entities(queried.begin(), queried.end());    
 
     people_mapping = generate_people_graph();
+    generate_crime_graph(people_mapping);
 
     auto names = AccessYAML::load("data/lists/names.yaml");
 

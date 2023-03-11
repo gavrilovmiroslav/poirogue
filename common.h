@@ -10,6 +10,33 @@
 #include <string>
 #include <memory>
 
+template<typename A>
+struct LessTup {
+    bool operator() (const std::tuple<A, int>& a1, const std::tuple<A, int>& a2)
+    {
+        return std::get<1>(a1) < std::get<1>(a2);
+    }
+};
+
+template<typename T>
+void shuffle(std::vector<T>& ts)
+{
+    TCODRandom* rng = TCODRandom::getInstance();
+
+    std::priority_queue<std::tuple<T, int>, std::vector<std::tuple<T, int>>, LessTup<T>> pq;
+    for (T t : ts)
+    {
+        pq.push({ t, rng->getInt(0, 100) });
+    }
+
+    ts.clear();
+    while (!pq.empty())
+    {
+        ts.push_back(std::get<0>(pq.top()));
+        pq.pop();
+    }
+}
+
 using Color = TCOD_ColorRGB;
 
 struct Position
@@ -78,6 +105,11 @@ static const char* get_place_kind(PlaceKind kind)
     }
 }
 
+struct Time
+{
+    int t;
+};
+
 struct Person 
 {
     int person_id;
@@ -108,9 +140,19 @@ namespace graphs
 
 struct PeopleMapping
 {
-    Entity people[PEOPLE_COUNT];
+    Residents residents[REGION_COUNT]{};
+    Entity people[PEOPLE_COUNT + 1];
     Entity places[REGION_COUNT];
+    Entity events[EVENT_COUNT];
     std::shared_ptr<graphs::Graph> graph;
+
+    Entity get_victim() { return people[PEOPLE_COUNT]; }
+
+    std::vector<Entity> get_all_places_shuffled();
+    std::vector<Entity> get_all_people_shuffled();
+    std::vector<Entity> get_all_visiting_with(Entity visitor, bool with_victim = false);
+    std::vector<Entity> get_all_working_with(Entity visitor, bool with_victim = false);
+    std::vector<Entity> get_all_living_with(Entity visitor, bool with_victim = false);
 };
 
 struct CurrentInTurn

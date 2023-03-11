@@ -136,6 +136,7 @@
     <ClCompile Include="engine.cpp" />
     <ClCompile Include="hud.cpp" />
     <ClCompile Include="level.cpp" />
+    <ClCompile Include="people.cpp" />
     <ClCompile Include="player.cpp" />
     <ClCompile Include="poirogue.cpp" />
     <ClCompile Include="time.cpp" />
@@ -151,6 +152,7 @@
     <ClInclude Include="engine.h" />
     <ClInclude Include="graphs.h" />
     <ClInclude Include="hud.h" />
+    <ClInclude Include="interactions.h" />
     <ClInclude Include="level.h" />
     <ClInclude Include="player.h" />
     <ClInclude Include="symbols.h" />
