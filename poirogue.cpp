@@ -20,19 +20,39 @@
 struct BlockMovementThroughPeopleSystem
     : public OneOffSystem
     , public AccessEvents_Listen<CommandSignal>
-    , public AccessWorld_UseUnique<Level>
     , public AccessWorld_UseUnique<CommandContext>
+    , public AccessWorld_QueryAllEntitiesWith<Person, Name, WorldPosition>
+    , public AccessWorld_QueryComponent<Player>
 {
     void react_to_event(CommandSignal& signal)
     {
-        auto& level = AccessWorld_UseUnique<Level>::access_unique();
+        if (signal.type != CommandType::Move) return;
         auto& context = AccessWorld_UseUnique<CommandContext>::access_unique();
 
-        if (context.cancelled) return;
+        printf("[BLOCK MOV] Collision testing stared...\n");
+        printf("Subject: #%d\n", context.subject);
+        printf("Is player? #%s\n", AccessWorld_QueryComponent<Player>::has_component(context.subject) ? "yes" : "no");
+        printf("Source: %d, %d\n", signal.data.move.from_x, signal.data.move.from_y);
+        printf("Destination: %d, %d\n", signal.data.move.to_x, signal.data.move.to_y);
 
-//        level.
-//        if (interpreters.find(signal.type) != interpreters.end())
-//            interpreters[signal.type]->interpret_command(context, signal);
+        for (auto&& [e, p, n, wp] : AccessWorld_QueryAllEntitiesWith<Person, Name, WorldPosition>::query().each())
+        {
+            printf("\t%s (%d) at position %d, %d\n", n.name.c_str(), p.person_id, wp.x, wp.y);
+            if (context.subject == e)
+            {
+                printf("\t -- ignoring self\n");
+                continue;
+            }
+
+            if (signal.data.move.to_x == wp.x && signal.data.move.to_y == wp.y)
+            {
+                printf("\t -- is blocking, will cancel\n");
+                context.cancelled = true;
+                break;
+            }
+        }
+
+        printf("[BLOCK MOV] Testing complete.\n");
     }
 };
 
@@ -46,7 +66,6 @@ int main(int argc, char* argv[])
     engine.add_one_off_system<PlayerCreationSystem>();
     engine.add_one_off_system<Debug_ReloadConfigSystem>();
     engine.add_one_off_system<TimeSystem>();
-
 
     engine.add_one_off_system<BlockMovementThroughPeopleSystem>();
 

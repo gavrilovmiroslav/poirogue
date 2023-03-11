@@ -61,13 +61,19 @@ void CommandInterpretationSystem::react_to_event(IssueCommandSignal& signal)
 }
 
 void CommandInterpretationSystem::react_to_event(CommandSignal& signal)
-{
+{    
     auto& context = AccessWorld_UseUnique<CommandContext>::access_unique();
 
-    if (context.cancelled) return;
+    if (context.cancelled)
+    {
+        AccessEvents_Emit<CommandCancelledSignal>::emit_event(CommandCancelledSignal{});
+        return;
+    }
 
     if (interpreters.find(signal.type) != interpreters.end())
         interpreters[signal.type]->interpret_command(context, signal);
+
+    AccessEvents_Emit<CommandCompletedSignal>::emit_event(CommandCompletedSignal{});
 }
 
 void CommandInterpretationSystem::react_to_event(CommandCompletedSignal&)
@@ -83,6 +89,8 @@ void CommandInterpretationSystem::react_to_event(CommandCompletedSignal&)
 
 void CommandInterpretationSystem::react_to_event(CommandCancelledSignal&)
 {
+    AccessEvents_Emit<ActionCompleteSignal>::emit_event(ActionCompleteSignal{ ACTION_CANCELLED_COST });
+
     if (issued_commands.size() > 0)
     {
         auto signal = issued_commands.front();

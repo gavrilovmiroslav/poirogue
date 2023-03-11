@@ -21,11 +21,14 @@ struct CommandInterpreter
 
 struct CommandInterpretationSystem
     : public OneOffSystem
+    , public AccessEvents_Emit<ActionCompleteSignal>
     , public AccessEvents_Listen<IssueCommandSignal>
     , public AccessEvents_Listen<CommandSignal>
     , public AccessEvents_Listen<CommandCompletedSignal>
     , public AccessEvents_Listen<CommandCancelledSignal>
     , public AccessEvents_Emit<CommandSignal>
+    , public AccessEvents_Emit<CommandCompletedSignal>
+    , public AccessEvents_Emit<CommandCancelledSignal>    
     , public AccessWorld_UseUnique<CommandContext>
 {
     std::queue<IssueCommandSignal> issued_commands;
