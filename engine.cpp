@@ -168,9 +168,7 @@ void AccessConsole::fg(const Position& pt, RGB color)
 
 Entity AccessWorld_ModifyWorld::create_entity()
 {
-    auto e = PoirogueEngine::Instance->entt_world.create();
-    printf("CREATED #%d\n", (long)e);
-    return e;
+    return PoirogueEngine::Instance->entt_world.create();    
 }
 
 AccessBackConsole::AccessBackConsole()

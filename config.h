@@ -15,6 +15,7 @@
 // people and regions
 #define REGION_COUNT 6
 #define PEOPLE_COUNT 10
+#define EVENT_COUNT  50
 
 // actions
 #define ACTION_POINTS_PER_TURN 16

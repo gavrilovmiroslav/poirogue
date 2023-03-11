@@ -5,6 +5,7 @@
 #include <bitset>
 #include <libtcod.hpp>
 #include <queue>
+#include <functional>
 
 #include "config.h"
 #include "common.h"
@@ -58,6 +59,8 @@ struct Person;
 
 struct LevelCreationEvent {};
 
+using SocialInteraction = std::function<void(PeopleMapping&, bool)>;
+
 struct LevelCreationSystem
     : public OneOffSystem
     , public AccessWorld_UseUnique<Level>
@@ -69,7 +72,10 @@ struct LevelCreationSystem
     , public AccessWorld_ModifyEntity
     , public AccessYAML
 {
+    std::vector<SocialInteraction> social_interactions;
+
     PeopleMapping generate_people_graph();
+    void generate_crime_graph(PeopleMapping& peopleMapping);
     void generate();
     void activate() override;
     void react_to_event(KeyEvent& signal) override;
