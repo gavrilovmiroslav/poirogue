@@ -73,11 +73,10 @@ protected:
 	static PoirogueEngine* Instance;
 
 private:
-    Position mouse_position;
+    ScreenPosition mouse_position;
 	bool engine_running;
     
     friend struct AccessConsole;
-    friend struct AccessBackConsole;
 
     friend struct AccessWorld_CheckValidity;
     friend struct AccessMousePosition;
@@ -144,10 +143,10 @@ struct AccessYAML : public Access
 
 struct AccessConsole : public Access
 {
-    void str(const Position& pt, std::string_view text, RGB fg);
-    void ch(const Position& pt, std::string_view text);    
-    void bg(const Position& pt, RGB color);    
-    void fg(const Position& pt, RGB color);
+    void str(const ScreenPosition& pt, std::string_view text, RGB fg);
+    void ch(const ScreenPosition& pt, std::string_view text);
+    void bg(const ScreenPosition& pt, RGB color);
+    void fg(const ScreenPosition& pt, RGB color);
 };
 
 struct AccessWorld_CheckValidity : public Access
@@ -158,35 +157,27 @@ struct AccessWorld_CheckValidity : public Access
     }
 };
 
-struct AccessBackConsole : public Access
-{
-    tcod::Console console;
-    
-    AccessBackConsole();
-
-    void clear();
-    void ch(const Position& pt, std::string_view text);
-    void bg(const Position& pt, RGB color);
-    void fg(const Position& pt, RGB color);
-    void blit(float fg_alpha = 0.5f, float bg_alpha = 0.5f);
-};
-
-
 struct AccessMousePosition : public Access
 {
-    const Position& get_mouse_position() const
+    const ScreenPosition& get_mouse_position() const
     {
         return PoirogueEngine::Instance->mouse_position;
     }
 };
 
 template<typename T>
+T& get_res()
+{
+    static T unique_resource;
+    return unique_resource;
+}
+
+template<typename T>
 struct AccessWorld_UseUnique : public Access
 {
     T& access_unique()
-    {
-        static T unique_resource;
-        return unique_resource;
+    {        
+        return get_res<T>();
     }
 };
 
@@ -225,7 +216,7 @@ struct AccessWorld_ModifyEntity : public Access
 	template<typename T>
 	void remove_component(Entity entity)
 	{
-		return PoirogueEngine::Instance->entt_world.remove<T>(entity);
+		PoirogueEngine::Instance->entt_world.remove<T>(entity);
 	}
 };
 

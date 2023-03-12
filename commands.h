@@ -2,27 +2,6 @@
 
 #include "common.h"
 
-enum CommandType
-{
-    Wait,
-    Move,
-};
-
-struct WaitCommandData
-{};
-
-struct MoveCommandData
-{
-    int from_x, from_y;
-    int to_x, to_y;
-};
-
-union Command
-{
-    WaitCommandData wait;
-    MoveCommandData move;
-};
-
 struct IssueCommandSignal
 {
     Entity subject;

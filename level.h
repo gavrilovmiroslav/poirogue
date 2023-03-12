@@ -12,27 +12,36 @@
 
 #include "graphs.h"
 
+struct PeopleMapping;
+struct Person;
+
+struct LevelCreationEvent {};
+
 struct Level
+    : public AccessWorld_ModifyWorld
+    , public AccessWorld_ModifyEntity
+    , public AccessWorld_UseUnique<Colors>
 {
     TCODMap* map;
-    
-    float digability[SCREEN_WIDTH][SCREEN_HEIGHT] { 0.0f, };
-    char dig[SCREEN_WIDTH][SCREEN_HEIGHT]{ ' ', };
-    char memory[SCREEN_WIDTH][SCREEN_HEIGHT]{ ' ', };
 
-    char rooms[SCREEN_WIDTH][SCREEN_HEIGHT]{ ' ', };
-    char regions[SCREEN_WIDTH][SCREEN_HEIGHT]{ ' ', };
+    float digability[MAP_WIDTH][MAP_HEIGHT] { 0.0f, };
+    char dig[MAP_WIDTH][MAP_HEIGHT]{ ' ', };
+    char memory[MAP_WIDTH][MAP_HEIGHT]{ ' ', };
 
-    std::vector<XY> region_centers;
-    std::vector<XY> region_tiles[REGION_COUNT];
+    float hues[MAP_WIDTH][MAP_HEIGHT]{ 0.0f };
+    char rooms[MAP_WIDTH][MAP_HEIGHT]{ ' ', };
+    char regions[MAP_WIDTH][MAP_HEIGHT]{ ' ', };
+
+    std::vector<WorldPosition> region_centers;
+    std::vector<WorldPosition> region_tiles[REGION_COUNT];
 
     int tiles_in_room[ROOM_COUNT] { 0, };
-    std::vector<XY> tiles[ROOM_COUNT];
+    std::vector<WorldPosition> tiles[ROOM_COUNT];
 
-    std::vector<XY> walkable;
-    std::bitset<SCREEN_WIDTH * SCREEN_HEIGHT> flood_fill_visited;
-    std::bitset<SCREEN_WIDTH * SCREEN_HEIGHT> flood_fill_candidate;
-    std::bitset<SCREEN_WIDTH * SCREEN_HEIGHT> bombs;
+    std::vector<WorldPosition> walkable;
+    std::bitset<MAP_WIDTH * MAP_HEIGHT> flood_fill_visited;
+    std::bitset<MAP_WIDTH * MAP_HEIGHT> flood_fill_candidate;
+    std::bitset<MAP_WIDTH * MAP_HEIGHT> bombs;
     std::vector<XY> exploded_bombs;
     graphs::Graph dig_plan;
 
@@ -54,12 +63,6 @@ struct Level
     void update_map_visibility();
 };
 
-struct PeopleMapping;
-struct Person;
-
-struct LevelCreationEvent {};
-using SocialInteraction = std::function<void(PeopleMapping&, int, Entity, bool)>;
-
 struct LevelCreationSystem
     : public OneOffSystem
     , public AccessWorld_UseUnique<Level>
@@ -70,14 +73,20 @@ struct LevelCreationSystem
     , public AccessWorld_ModifyWorld
     , public AccessWorld_ModifyEntity
     , public AccessYAML
-{
-    std::vector<SocialInteraction> social_interactions;    
+{    
+    template<typename T>
+    std::shared_ptr<T> add_pipeline()
+    {
+        std::shared_ptr<T> ptr{ new T };
+        pipeline.push_back(ptr);
+        return ptr;
+    }
 
-    void generate_people_graph();
-    void generate_crime_graph();
-    void generate();
     void activate() override;
     void react_to_event(KeyEvent& signal) override;
+
+private:
+    std::vector<std::shared_ptr<CraftingPipeline>> pipeline;
 };
 
 using PlaceWeight = std::tuple<std::string, int>;
@@ -93,27 +102,6 @@ struct PlaceWeightSort
 };
 
 using PlaceWeightQueue = std::priority_queue<PlaceWeight, std::vector<PlaceWeight>, PlaceWeightSort>;
-
-enum Debug_RenderMode
-{
-    Off = 0,
-    RoomNumbers,
-    Regions,
-    COUNT
-};
-
-struct Debug_RoomLevelRenderSystem
-    : public RuntimeSystem
-    , public AccessConsole
-    , public AccessEvents_Listen<KeyEvent>
-    , public AccessWorld_UseUnique<Level>
-{
-    Debug_RenderMode mode = Debug_RenderMode::Off;
-
-    void activate() override;
-
-    void react_to_event(KeyEvent& signal) override;
-};
 
 struct LevelRenderSystem
     : public RuntimeSystem

@@ -58,6 +58,19 @@ struct WaitCommandInterpreter
     void interpret_command(CommandContext&, CommandSignal&) override;
 };
 
+struct UnlockCommandInterpreter
+    : public CommandInterpreter
+    , public AccessWorld_ModifyEntity
+{
+    void interpret_command(CommandContext&, CommandSignal&) override;
+};
+
+struct InspectCommandInterpreter
+    : public CommandInterpreter    
+{
+    void interpret_command(CommandContext&, CommandSignal&) override;
+};
+
 struct Level;
 
 struct MoveCommandInterpreter

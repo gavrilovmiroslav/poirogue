@@ -35,6 +35,36 @@ void MoveCommandInterpreter::interpret_command(CommandContext& context, CommandS
 }
 
 
+void UnlockCommandInterpreter::interpret_command(CommandContext& context, CommandSignal& signal)
+{   
+    TCODRandom* rng = TCODRandom::getInstance();
+
+    if (rng->getFloat(0, 100) > signal.data.unlock.chance)
+    {
+        printf("UNLOCKED!\n");
+        auto chest = context.targets[0];
+        remove_component<Locked>(chest);
+        remove_component<BumpDefault>(chest);
+
+        Command c;
+        add_component<BumpDefault>(chest, CommandType::Inspect, c);
+
+        finish_command(ACTION_POINTS_PER_TURN / 2);
+    }
+    else
+    {
+        printf("FAILED!\n");
+        finish_command(2 * ACTION_POINTS_PER_TURN);
+    }
+}
+
+
+void InspectCommandInterpreter::interpret_command(CommandContext& context, CommandSignal& signal)
+{
+    printf("Inspect\n");
+    finish_command(0);
+}
+
 void CommandInterpretationSystem::start_interpreting(IssueCommandSignal signal)
 {
     auto& command_context = AccessWorld_UseUnique<CommandContext>::access_unique();

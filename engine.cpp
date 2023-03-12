@@ -128,17 +128,17 @@ YAML::Node AccessYAML::load(const char* name)
     return YAML::LoadFile(name);
 }
 
-void AccessConsole::str(const Position& pt, std::string_view text, RGB fg)
+void AccessConsole::str(const ScreenPosition& pt, std::string_view text, RGB fg)
 {
     tcod::print(PoirogueEngine::Instance->tcod_console, (std::array<int, 2>&)pt, text, fg, std::nullopt);
 }
 
-void AccessConsole::ch(const Position& pt, std::string_view text)
+void AccessConsole::ch(const ScreenPosition& pt, std::string_view text)
 {
     tcod::print(PoirogueEngine::Instance->tcod_console, (std::array<int, 2>&)pt, text, std::nullopt, std::nullopt);
 }
 
-void AccessConsole::bg(const Position& pt, RGB color)
+void AccessConsole::bg(const ScreenPosition& pt, RGB color)
 {
     std::array<int, 2>& pos = (std::array<int, 2>&)pt;
     if (PoirogueEngine::Instance->tcod_console.in_bounds(pos))
@@ -152,7 +152,7 @@ void AccessConsole::bg(const Position& pt, RGB color)
     }
 }
 
-void AccessConsole::fg(const Position& pt, RGB color)
+void AccessConsole::fg(const ScreenPosition& pt, RGB color)
 {
     std::array<int, 2>& pos = (std::array<int, 2>&)pt;
     if (PoirogueEngine::Instance->tcod_console.in_bounds(pos))
@@ -169,54 +169,4 @@ void AccessConsole::fg(const Position& pt, RGB color)
 Entity AccessWorld_ModifyWorld::create_entity()
 {
     return PoirogueEngine::Instance->entt_world.create();    
-}
-
-AccessBackConsole::AccessBackConsole()
-{
-    console = tcod::Console{ SCREEN_WIDTH, SCREEN_HEIGHT };
-}
-
-void AccessBackConsole::clear()
-{
-    TCOD_console_clear(console.get());
-}
-
-void AccessBackConsole::ch(const Position& pt, std::string_view text)
-{
-    tcod::print(console, (std::array<int, 2>&)pt, text, std::nullopt, std::nullopt);
-}
-
-void AccessBackConsole::bg(const Position& pt, RGB color)
-{
-    std::array<int, 2>& pos = (std::array<int, 2>&)pt;
-    if (console.in_bounds(pos))
-    {
-        auto& tile = console.at(pos);
-        tcod::print(console, pos, codepoint_to_utf8(tile.ch), std::nullopt, color);
-    }
-    else
-    {
-        tcod::print(console, pos, " ", std::nullopt, color);
-    }
-}
-
-void AccessBackConsole::fg(const Position& pt, RGB color)
-{
-    std::array<int, 2>& pos = (std::array<int, 2>&)pt;
-    if (console.in_bounds(pos))
-    {
-        auto& tile = console.at((std::array<int, 2>&)pt);
-        tcod::print(console, (std::array<int, 2>&)pt, codepoint_to_utf8(tile.ch), color, std::nullopt);
-    }
-    else
-    {
-        tcod::print(console, pos, " ", color, std::nullopt);
-    }
-}
-
-void AccessBackConsole::blit(float fg_alpha, float bg_alpha)
-{
-    TCOD_console_blit(
-        console.get(), 0, 0, 0, 0, 
-        PoirogueEngine::Instance->tcod_console.get(), 0, 0, fg_alpha, bg_alpha);
 }

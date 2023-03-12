@@ -75,5 +75,5 @@ void Debug_ReloadConfigSystem::react_to_event(KeyEvent& signal)
 
 void Debug_HintSystem::activate()
 {
-	str({ 0, 0 }, " [F1: TURN ORDER] [F2: RELOAD COLORS] [F3: NEW WORLD] [F4: LAYERS]", "#ff0000"_rgb);
+	str({ 0, 0 }, " [F1: TURN ORDER] [F2: RELOAD COLORS] [F3: NEW WORLD]", "#ff0000"_rgb);
 }

@@ -31,6 +31,11 @@
 #define MONO_SYM '%'
 #define RING_SYM ('&' + 1)
 #define EYEDROP_SYM (']' + 4)
+#define WIRE_SYM (']' - 1)
+#define CHEST_SYM (']' + 5)
+#define WAVE_SYM (']' + 6)
+#define PLANT1_SYM (']' + 7)
+#define PLANT2_SYM (']' + 8)
 
 struct Colors
 {

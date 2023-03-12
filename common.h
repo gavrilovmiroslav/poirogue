@@ -10,6 +10,72 @@
 #include <string>
 #include <memory>
 
+using Color = TCOD_ColorRGB;
+
+
+struct RGB
+{
+    float r, g, b;
+
+    explicit RGB(float r, float g, float b)
+        : r(r), g(g), b(b) {}
+
+    RGB()
+        : r(0.0f), g(0.0f), b(0.0f) {}
+
+    static RGB random()
+    {
+        return RGB{ (float)(rand() % 255), (float)(rand() % 255), (float)(rand() % 255) };
+    }
+
+    operator TCOD_ColorRGB()
+    {
+        return { (uint8_t)r, (uint8_t)g, (uint8_t)b };
+    }
+};
+
+inline RGB operator""_rgb(const char* hexValue, size_t size)
+{
+    assert(size == 7);
+    int r, g, b;
+    sscanf_s(hexValue, "#%02x%02x%02x", &r, &g, &b);
+    return RGB{
+        (r & 0xFF) / 1.0f,
+        (g & 0xFF) / 1.0f,
+        (b & 0xFF) / 1.0f
+    };
+}
+
+
+struct HSL
+{
+    float h, s, l;
+
+    explicit HSL(float h, float s, float l)
+        : h(h), s(s), l(l)
+    {}
+
+    HSL()
+        : h(0.0f), s(0.0f), l(0.0f)
+    {}
+
+    HSL operator*(float dl)
+    {
+        return HSL(h, s, l * dl);
+    }
+
+    operator TCOD_ColorRGB()
+    {
+        return TCOD_color_HSV(h, s, l);
+    }
+
+    operator RGB()
+    {
+        auto c = TCOD_color_HSV(h, s, l);
+        return RGB{ (float)c.r, (float)c.g, (float)c.b };
+    }
+};
+
 template<typename A>
 struct LessTup {
     bool operator() (const std::tuple<A, int>& a1, const std::tuple<A, int>& a2)
@@ -37,9 +103,7 @@ void shuffle(std::vector<T>& ts)
     }
 }
 
-using Color = TCOD_ColorRGB;
-
-struct Position
+struct ScreenPosition
 {
     int x;
     int y;
@@ -137,6 +201,11 @@ namespace graphs
 {
     struct Graph;
 }
+
+struct CraftingPipeline 
+{
+    virtual void execute_crafting() = 0;
+};
 
 using PersonEntity = Entity;
 using PlaceEntity = Entity;
@@ -262,6 +331,11 @@ struct Symbol
     std::string sym;
 };
 
+struct Colored
+{
+    RGB color;
+};
+
 struct Health 
 {
     int max_hp;
@@ -272,9 +346,26 @@ struct WorldPosition
 {
     int x;
     int y;
+
+    inline float distance(const WorldPosition& xy2) const
+    {
+        float dx = ((float)x - (float)xy2.x);
+        float dy = ((float)y - (float)xy2.y);
+        return  dx * dx + dy * dy;
+    }
+
+    bool operator==(const WorldPosition& other) const
+    {
+        return x == other.x && y == other.y;
+    }
 };
 
 #define TO_XY(x, y) ((int)x + MAP_WIDTH * (int)y)
+
+struct Level;
+
+using SocialInteraction = std::function<void(PeopleMapping&, int, Entity, bool)>;
+using PlaceConstruction = std::function<void(PeopleMapping&, Level&, Name)>;
 
 struct XY
 {
@@ -286,6 +377,54 @@ struct XY
         float dy = ((float)y - (float)xy2.y);
         return  dx * dx + dy * dy;
     }
+};
+
+struct Blocked {};
+struct Locked {};
+
+enum CommandType
+{
+    Wait,
+    Move,
+    Unlock,
+    Inspect,
+};
+
+struct WaitCommandData
+{};
+
+struct MoveCommandData
+{
+    int from_x, from_y;
+    int to_x, to_y;
+};
+
+struct UnlockCommandData
+{
+    int chance;
+};
+
+struct InspectCommandData
+{
+};
+
+union Command
+{
+    WaitCommandData wait;
+    MoveCommandData move;
+    UnlockCommandData unlock;
+    InspectCommandData inspect;
+};
+
+struct BumpDefault
+{
+    CommandType type;
+    Command data;
+};
+
+struct Weight
+{
+    int kg;
 };
 
 enum KeyCode
