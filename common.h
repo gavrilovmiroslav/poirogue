@@ -336,6 +336,15 @@ struct Calendar
     int minute;
 };
 
+struct CalendarUpdateSignal
+{};
+
+struct HourPassedSignal 
+{};
+
+struct DayPassedSignal
+{};
+
 struct Symbol
 {
     std::string sym;

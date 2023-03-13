@@ -580,8 +580,8 @@ void LevelCreationSystem::activate()
 
     auto& calendar = AccessWorld_UseUnique<Calendar>::access_unique();
     calendar.day = 1;
-    calendar.hour = 7;
-    calendar.minute = 0;
+    calendar.hour = 1;
+    calendar.minute = 1;
 
     AccessWorld_UseUnique<Level>::access_unique().generate();
 

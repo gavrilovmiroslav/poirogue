@@ -46,7 +46,7 @@ void TimeSystem::react_to_event(ActionCompleteSignal& signal)
 			q.order.emplace(std::tuple<ActionPoints, Speed, Entity>{ ap, s, e });
 		}
 
-		AccessWorld_UseUnique<Calendar>::access_unique().minute++;
+		AccessEvents_Emit<CalendarUpdateSignal>::emit_event();
 	}
 
 	const auto top = q.order.top();
@@ -54,4 +54,26 @@ void TimeSystem::react_to_event(ActionCompleteSignal& signal)
 	q.order.pop();
 
 	AccessEvents_Emit<AwaitingActionSignal>::emit_event(AwaitingActionSignal{ current_in_order.current });
+}
+
+void TimeSystem::react_to_event(CalendarUpdateSignal&)
+{
+	auto& cal = AccessWorld_UseUnique<Calendar>::access_unique();
+
+	cal.minute++;
+	if (cal.minute > 60)
+	{
+		cal.minute = 0;
+		cal.hour++;
+
+		AccessEvents_Emit<HourPassedSignal>::emit_event();
+
+		if (cal.hour > 24)
+		{
+			cal.hour = 0;
+			cal.day++;
+
+			AccessEvents_Emit<DayPassedSignal>::emit_event();
+		}
+	}
 }
