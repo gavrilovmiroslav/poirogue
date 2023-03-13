@@ -23,12 +23,15 @@ struct Level
     , public AccessWorld_UseUnique<Colors>
 {
     TCODMap* map;
-
+    
     float digability[MAP_WIDTH][MAP_HEIGHT] { 0.0f, };
     char dig[MAP_WIDTH][MAP_HEIGHT]{ ' ', };
     char memory[MAP_WIDTH][MAP_HEIGHT]{ ' ', };
 
     float hues[MAP_WIDTH][MAP_HEIGHT]{ 0.0f };
+    float sats[MAP_WIDTH][MAP_HEIGHT]{ 0.0f };
+    float vals[MAP_WIDTH][MAP_HEIGHT]{ 0.0f };
+
     char rooms[MAP_WIDTH][MAP_HEIGHT]{ ' ', };
     char regions[MAP_WIDTH][MAP_HEIGHT]{ ' ', };
 
@@ -65,9 +68,11 @@ struct Level
 
 struct LevelCreationSystem
     : public OneOffSystem
+    , public AccessWorld_UseUnique<Calendar>
     , public AccessWorld_UseUnique<Level>
     , public AccessWorld_UseUnique<PeopleMapping>
     , public AccessWorld_QueryAllEntitiesWith<Person>
+    , public AccessWorld_QueryAllEntitiesWith<WorldPosition>
     , public AccessEvents_Listen<KeyEvent>
     , public AccessEvents_Emit<LevelCreationEvent>
     , public AccessWorld_ModifyWorld

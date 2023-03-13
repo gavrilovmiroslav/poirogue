@@ -7,9 +7,9 @@ visible-shift-very-far: 0.25
 
 memory-hue: 240.0
 memory-sat: 0.1
-memory-lit: 0.5
+memory-lit: 0.3
 
-shimmer-hue: 180.0
-shimmer-stripe-strength: 20.0
-shimmer-stripe-speed: 0.05
-shimmer-stripe-width: 0.25
+shimmer-hue: 75.0
+shimmer-stripe-strength: 10.0
+shimmer-stripe-speed: 0.1
+shimmer-stripe-width: 0.1

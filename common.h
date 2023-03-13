@@ -137,35 +137,38 @@ using Entity = ecs::entity;
 
 struct Player {};
 
+struct Shimmering {};
+
 struct Name {
     std::string name;
 };
 
-enum Sex {
+enum class Sex {
     Male,
     Female,
     MONALE,
 };
 
-enum PlaceKind {
+enum class PlaceKind {
     FewWorkNoVisits,
     FewWorkManyVisits,
     ManyWorkFewVisits,
     SomeWorkSomeVisit,
     NoWorkOnlyVisit,
     SomeVisits,
+    COUNT
 };
 
 static const char* get_place_kind(PlaceKind kind)
 {
     switch (kind)
     {
-    case FewWorkNoVisits: return "few-work-no-visits";
-    case FewWorkManyVisits: return "few-work-many-visits";
-    case ManyWorkFewVisits: return "many-work-few-visits";
-    case SomeWorkSomeVisit: return "some-work-some-visit";
-    case NoWorkOnlyVisit: return "no-work-only-visit";
-    case SomeVisits: default: return "exceptional-visit";
+    case PlaceKind::FewWorkNoVisits: return "few-work-no-visits";
+    case PlaceKind::FewWorkManyVisits: return "few-work-many-visits";
+    case PlaceKind::ManyWorkFewVisits: return "many-work-few-visits";
+    case PlaceKind::SomeWorkSomeVisit: return "some-work-some-visit";
+    case PlaceKind::NoWorkOnlyVisit: return "no-work-only-visit";
+    case PlaceKind::SomeVisits: default: return "exceptional-visit";
     }
 }
 
@@ -326,6 +329,13 @@ struct Inventory
 struct NextTurnSignal
 {};
 
+struct Calendar
+{
+    int day;
+    int hour;
+    int minute;
+};
+
 struct Symbol
 {
     std::string sym;
@@ -354,6 +364,11 @@ struct WorldPosition
         return  dx * dx + dy * dy;
     }
 
+    WorldPosition operator+(const WorldPosition& other) const
+    {
+        return WorldPosition{ x + other.x, y + other.y };
+    }
+
     bool operator==(const WorldPosition& other) const
     {
         return x == other.x && y == other.y;
@@ -379,8 +394,10 @@ struct XY
     }
 };
 
+struct Hot {};
 struct Blocked {};
 struct Locked {};
+struct Exhausting {};
 
 enum CommandType
 {
@@ -425,6 +442,20 @@ struct BumpDefault
 struct Weight
 {
     int kg;
+};
+
+enum class PsychicEffectKind
+{
+    Forgetfulness,
+    IncreasedStress,
+    LossOfTime,
+    COUNT
+};
+
+struct PsychicEffect
+{
+    PsychicEffectKind kind;
+    int range;
 };
 
 enum KeyCode

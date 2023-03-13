@@ -5,6 +5,7 @@
 
 struct TimeSystem
 	: public OneOffSystem
+	, public AccessWorld_UseUnique<Calendar>
 	, public AccessWorld_UseUnique<TurnOrderQueue>
 	, public AccessWorld_UseUnique<CurrentInTurn>
 	, public AccessWorld_QueryAllEntitiesWith<ActionPoints, Speed>

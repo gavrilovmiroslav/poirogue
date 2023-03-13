@@ -22,6 +22,8 @@ void Level::init()
             dig[i][j] = ' ';
             rooms[i][j] = ' ';
             hues[i][j] = colors.visible_hue;
+            sats[i][j] = colors.visible_sat;
+            vals[i][j] = 0.75f;
             digability[i][j] = rng->getFloat(0.0f, 1.0f, 0.5f);
         }
     }
@@ -572,7 +574,15 @@ void Level::generate()
 }
 
 void LevelCreationSystem::activate()
-{
+{   
+    auto all_in_world = AccessWorld_QueryAllEntitiesWith<WorldPosition>().query();
+    AccessWorld_ModifyWorld::destroy_entities(all_in_world.begin(), all_in_world.end());
+
+    auto& calendar = AccessWorld_UseUnique<Calendar>::access_unique();
+    calendar.day = 1;
+    calendar.hour = 7;
+    calendar.minute = 0;
+
     AccessWorld_UseUnique<Level>::access_unique().generate();
 
     auto& pm = AccessWorld_UseUnique<PeopleMapping>::access_unique();
@@ -621,26 +631,28 @@ void LevelRenderSystem::activate()
                 float dist_factor = 1.0f;
                 if (dist >= sight.radius * 0.9f)
                 {
-                    dist_factor = colors.visible_shift_very_far;
+                    dist_factor = 0.25f;
                 }
                 else if (dist >= sight.radius * 0.75f)
                 {
-                    dist_factor = colors.visible_shift_far;
+                    dist_factor = 0.45f;
                 }
                 else if (dist >= sight.radius * 0.5f)
                 {
-                    dist_factor = colors.visible_shift_mid;
+                    dist_factor = 0.6f;
                 }
 
                 if (level.dig[i][j] == ' ')
                 {
-                    AccessConsole::fg(scr, HSL(level.hues[i][j], colors.visible_sat, dist_factor));
+                    level.memory[i][j] = level.dig[i][j];
+                    AccessConsole::fg(scr, HSL(level.hues[i][j], level.sats[i][j], dist_factor * level.vals[i][j]));
                     AccessConsole::ch(scr, "#");
+                    level.memory[i][j] = '#';
                 }
                 else if (level.dig[i][j] == '*')
                 {
                     auto time_factor = std::sin((i + j) * colors.shimmer_stripe_width + tick * colors.shimmer_stripe_speed);
-                    bg(scr, HSL(colors.shimmer_hue + time_factor * colors.shimmer_stripe_strength, 1.0f,
+                    bg(scr, HSL(level.hues[i][j] + time_factor * colors.shimmer_stripe_strength, 1.0f,
                         rng->getFloat(0.95f, 1.0f) * (rad - world_pos.distance(ij)) / radius));
                     AccessConsole::fg(scr, HSL(255.0f, 0.3f, 2 * (radius - world_pos.distance(ij)) / rad));
                     level.memory[i][j] = '.';
@@ -648,9 +660,9 @@ void LevelRenderSystem::activate()
                 }
                 else
                 {
-                    AccessConsole::fg(scr, HSL(colors.visible_hue, colors.visible_sat, dist_factor));
+                    AccessConsole::fg(scr, HSL(level.hues[i][j], colors.visible_sat, dist_factor));
                     std::string s(1, level.dig[i][j]);
-                    level.memory[i][j] = '.';
+                    level.memory[i][j] = level.dig[i][j];
                     AccessConsole::ch(scr, s);
                 }
             }

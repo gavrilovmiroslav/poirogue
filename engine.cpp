@@ -121,7 +121,6 @@ void PoirogueEngine::quit()
 }
 
 PoirogueEngine* PoirogueEngine::Instance = nullptr;
-std::unordered_map<size_t, Entity> Access::unique_resources = {};
 
 YAML::Node AccessYAML::load(const char* name)
 {    

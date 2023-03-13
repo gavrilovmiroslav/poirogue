@@ -25,7 +25,7 @@ int main(int argc, char* argv[])
 {
     PoirogueEngine engine;
     
-    auto level_creation = engine.add_one_off_system<LevelCreationSystem>();    
+    auto level_creation = engine.add_one_off_system<LevelCreationSystem>();
     level_creation->add_pipeline<PopulationCrafting>();
 
     auto plot = level_creation->add_pipeline<PlotCrafting>();    
@@ -47,12 +47,12 @@ int main(int argc, char* argv[])
 
     engine.add_runtime_system<LevelRenderSystem>();
     engine.add_runtime_system<SymbolRenderSystem>();
-    engine.add_runtime_system<MouseCursorSystem>();
     engine.add_runtime_system<PlayerChoiceSystem>();
     engine.add_runtime_system<AIChoiceSystem>();
     engine.add_runtime_system<Debug_TurnOrderSystem>();    
     engine.add_runtime_system<Debug_HintSystem>();
     engine.add_runtime_system<HUDSystem>();
+    engine.add_runtime_system<MouseCursorSystem>();
 
     engine.restart_game();
     

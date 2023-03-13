@@ -45,6 +45,8 @@ void TimeSystem::react_to_event(ActionCompleteSignal& signal)
 			ap.ap += ACTION_POINTS_PER_TURN + (AccessWorld_QueryComponent<Player>::has_component(e) ? ACTION_POINTS_PLAYER_BONUS : 0);
 			q.order.emplace(std::tuple<ActionPoints, Speed, Entity>{ ap, s, e });
 		}
+
+		AccessWorld_UseUnique<Calendar>::access_unique().minute++;
 	}
 
 	const auto top = q.order.top();

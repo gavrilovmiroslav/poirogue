@@ -8,7 +8,7 @@ void WaitCommandInterpreter::interpret_command(CommandContext& context, CommandS
 
 void MoveCommandInterpreter::interpret_command(CommandContext& context, CommandSignal& signal)
 {
-	const auto& level = AccessWorld_UseUnique<Level>::access_unique();
+	auto& level = AccessWorld_UseUnique<Level>::access_unique();
 
 	const auto& speed = AccessWorld_QueryComponent<Speed>::get_component(context.subject);
 	const auto cost_reduction = (speed.speed / ATTRIBUTE_SPEED_NORM) - 1;
@@ -17,7 +17,8 @@ void MoveCommandInterpreter::interpret_command(CommandContext& context, CommandS
 	if (level.map->isWalkable(signal.data.move.to_x, signal.data.move.to_y))
 	{
 		auto& world_pos = AccessWorld_QueryComponent<WorldPosition>::get_component(context.subject);
-		world_pos.x = signal.data.move.to_x;
+		
+        world_pos.x = signal.data.move.to_x;
 		world_pos.y = signal.data.move.to_y;
 
 		if (AccessWorld_QueryComponent<Player>::has_component(context.subject))

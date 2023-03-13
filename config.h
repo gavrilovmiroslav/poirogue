@@ -24,18 +24,24 @@
 
 // attributes
 #define ATTRIBUTE_SPEED_NORM 100
-#define ATTRIBUTE_SIGHT_NORM 20
+#define ATTRIBUTE_SIGHT_NORM 30
 
 // inventory
 #define INVENTORY_SIZE 6
 #define MONO_SYM '%'
+#define MACHINE_SYM '&'
+#define FLOOR_SYM ('!' + 1)
 #define RING_SYM ('&' + 1)
-#define EYEDROP_SYM (']' + 4)
-#define WIRE_SYM (']' - 1)
-#define CHEST_SYM (']' + 5)
-#define WAVE_SYM (']' + 6)
-#define PLANT1_SYM (']' + 7)
-#define PLANT2_SYM (']' + 8)
+#define EYEDROP_SYM ('a')
+#define WIRE_SYM ('c' + 28)
+#define CHEST_SYM ('b')
+#define WAVE_SYM ('c')
+#define PLANT1_SYM ('d')
+#define PLANT2_SYM ('e')
+#define BOOKCASE_SYM ('f')
+#define MONOLITH_SYM ('g')
+#define FURNACE_SYM ('h')
+#define DRILL_SYM ('9' + 2)
 
 struct Colors
 {

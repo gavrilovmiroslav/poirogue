@@ -2,7 +2,7 @@
 few-work-no-visits:
   - warehouse: 13
   - machine shop: 3
-  - library: 0
+  - library: 13
 
 few-work-many-visits:
   - cleric: 3
@@ -17,7 +17,7 @@ many-work-few-visits:
   - foundry: 4
 
 some-work-some-visit:
-  - warehouse: 13
+  - warehouse: 3
   - skyport: 10
   - lounge: 5
   - market: 5

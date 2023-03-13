@@ -270,25 +270,32 @@ void PopulationCrafting::generate_people_graph()
         const int v = peopleMapping.residents[i].visits.size();
 
         auto kind = PlaceKind::SomeVisits;
-        if (w == 0 && v > 0)
-        {
-            kind = PlaceKind::NoWorkOnlyVisit;
+        if (rng->getInt(0, 100) > 80)
+        {            
+            if (w == 0 && v > 0)
+            {
+                kind = PlaceKind::NoWorkOnlyVisit;
+            }
+            else if (w > 0 && v == 0)
+            {
+                kind = PlaceKind::FewWorkNoVisits;
+            }
+            else if (w > 0 && v > 0 && v > rng->getFloat(1.0f, 2.0f) * w)
+            {
+                kind = PlaceKind::FewWorkManyVisits;
+            }
+            else if (w > 0 && v > 0 && w > rng->getFloat(1.0f, 2.0f) * v)
+            {
+                kind = PlaceKind::ManyWorkFewVisits;
+            }
+            else if (w > 0 && v > 0)
+            {
+                kind = PlaceKind::SomeWorkSomeVisit;
+            }
         }
-        else if (w > 0 && v == 0)
+        else
         {
-            kind = PlaceKind::FewWorkNoVisits;
-        }
-        else if (w > 0 && v > 0 && v > rng->getFloat(1.0f, 2.0f) * w)
-        {
-            kind = PlaceKind::FewWorkManyVisits;
-        }
-        else if (w > 0 && v > 0 && w > rng->getFloat(1.0f, 2.0f) * v)
-        {
-            kind = PlaceKind::ManyWorkFewVisits;
-        }
-        else if (w > 0 && v > 0)
-        {
-            kind = PlaceKind::SomeWorkSomeVisit;
+            kind = (PlaceKind)rng->getInt(0, (int)PlaceKind::COUNT - 1);
         }
 
         auto place_kind = std::string(get_place_kind(kind));
@@ -310,8 +317,15 @@ void PopulationCrafting::generate_people_graph()
 
         for (auto res : peopleMapping.residents[i].working)
         {
-            auto job_role_index = rng->getInt(0, job_roles.size() - 1);
-            graph->tag_node<Job>(people[res], job_roles[job_role_index].as<std::string>());
+            if (job_roles.size() > 0)
+            {
+                auto job_role_index = rng->getInt(0, job_roles.size() - 1);
+                graph->tag_node<Job>(people[res], job_roles[job_role_index].as<std::string>());
+            }
+            else
+            {
+                graph->tag_node<Job>(people[res], "VISITOR");
+            }
         }
     }
 }

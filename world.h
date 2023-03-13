@@ -17,7 +17,7 @@ struct WorldCrafting
     , public AccessYAML    
 {
     void execute_crafting() override;
-    
+        
     void create_warehouse(Level& level, PeopleMapping& mapping, int region, std::vector<WorldPosition> tiles, WorldPosition center);
     void create_machine_shop(Level& level, PeopleMapping& mapping, int region, std::vector<WorldPosition> tiles, WorldPosition center);
     void create_library(Level& level, PeopleMapping& mapping, int region, std::vector<WorldPosition> tiles, WorldPosition center);
@@ -40,4 +40,13 @@ struct WorldCrafting
     void create_hidden_nook(Level& level, PeopleMapping& mapping, int region, std::vector<WorldPosition> tiles, WorldPosition center);
     void create_haunted_spot(Level& level, PeopleMapping& mapping, int region, std::vector<WorldPosition> tiles, WorldPosition center);
 
+    Entity create_wares(WorldPosition tile, char sym = WIRE_SYM);
+    Entity create_furnace(WorldPosition wp);
+    Entity create_machine(WorldPosition wp);
+    Entity create_bookshelf(WorldPosition wp);
+    Entity create_chest(WorldPosition wp);
+    
+    void block_sight(Entity e, WorldPosition wp);
+    void block_walking(Entity e, WorldPosition wp);
+    void block_sight_walking(Entity e, WorldPosition wp);
 };

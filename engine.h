@@ -106,24 +106,9 @@ private:
 };
 
 struct Access
-{
-    static std::unordered_map<size_t, Entity> unique_resources;
+{};
 
-    template<typename T>
-    static size_t get_unique_resource_id()
-    {
-        return typeid(T).hash_code();
-    }
-
-    template<typename T>
-    static inline bool unique_resources_contain()
-    {
-        auto key = get_unique_resource_id<T>();
-        return unique_resources.find(key) != unique_resources.end();
-    }
-};
-
-struct AccessWorld_DirectRegistry
+struct AccessWorld_DirectRegistry : public Access
 {
     entt::registry& get_registry()
     {
@@ -210,7 +195,7 @@ struct AccessWorld_ModifyEntity : public Access
     template<typename T, typename... Args>
 	T& add_component(Entity entity, Args&&... args)
 	{        
-		return PoirogueEngine::Instance->entt_world.emplace<T>(entity, args...);
+		return PoirogueEngine::Instance->entt_world.emplace_or_replace<T>(entity, args...);
 	}
 
 	template<typename T>
