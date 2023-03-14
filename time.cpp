@@ -5,6 +5,11 @@
 
 void TimeSystem::activate()
 {
+	auto& cal = AccessWorld_UseUnique<Calendar>::access_unique();
+	cal.day = 1;
+	cal.hour = 7;
+	cal.minute = 0;
+
 	ActionCompleteSignal signal{ 0 };
 	react_to_event(signal);
 }

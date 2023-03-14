@@ -352,7 +352,7 @@ void WorldCrafting::create_junkyard(Level& level, PeopleMapping& mapping, int re
 			for (int j = -1; j < 2; j++)
 			{
 				auto heap = WorldPosition{ h.x + i, h.y + j };
-				if (rng->getInt(0, 100) > 75) continue;
+				if (rng->getInt(0, 100) > 45) continue;
 
 				switch (rng->getInt(0, 13))
 				{
@@ -456,9 +456,9 @@ void WorldCrafting::create_skyport(Level& level, PeopleMapping& mapping, int reg
 			auto tile = WorldPosition{ i, j };
 			auto distance = center.distance(tile);
 
+			if (distance < max_distance / 4) continue;
 			if (std::find(tiles.begin(), tiles.end(), tile) != tiles.end())
 			{
-				if ((int)distance % 2 == 0) continue;
 				if (rng->getFloat(0.0f, 1.0f) > (distance / max_distance))
 				{
 					auto floor_tiling = create_entity();

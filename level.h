@@ -116,6 +116,7 @@ struct LevelRenderSystem
     , public AccessWorld_QueryComponent<Sight>
     , public AccessWorld_UseUnique<Level>
     , public AccessWorld_UseUnique<Colors>
+    , public AccessWorld_UseUnique<PlayerFOV>
     , public AccessWorld_QueryAllEntitiesWith<Player>
 {
     int tick;

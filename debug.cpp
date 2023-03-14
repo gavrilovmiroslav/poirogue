@@ -72,8 +72,3 @@ void Debug_ReloadConfigSystem::react_to_event(KeyEvent& signal)
 		colors.shimmer_stripe_width = yaml_colors["shimmer-stripe-width"].as<float>();
 	}
 }
-
-void Debug_HintSystem::activate()
-{
-	str({ 0, 0 }, " [F1: TURN ORDER] [F2: RELOAD COLORS] [F3: NEW WORLD]", "#ff0000"_rgb);	
-}

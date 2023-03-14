@@ -384,6 +384,14 @@ struct WorldPosition
     }
 };
 
+struct WorldPositionHash
+{
+    size_t operator()(const WorldPosition& x) const
+    {
+        return (size_t)x.x ^ (size_t)x.y;
+    }
+};
+
 #define TO_XY(x, y) ((int)x + MAP_WIDTH * (int)y)
 
 struct Level;
@@ -465,6 +473,11 @@ struct PsychicEffect
 {
     PsychicEffectKind kind;
     int range;
+};
+
+struct PlayerFOV
+{
+    std::unordered_set<WorldPosition, WorldPositionHash> fields;
 };
 
 enum KeyCode

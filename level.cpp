@@ -580,8 +580,8 @@ void LevelCreationSystem::activate()
 
     auto& calendar = AccessWorld_UseUnique<Calendar>::access_unique();
     calendar.day = 1;
-    calendar.hour = 1;
-    calendar.minute = 1;
+    calendar.hour = 7;
+    calendar.minute = 0;
 
     AccessWorld_UseUnique<Level>::access_unique().generate();
 
@@ -605,62 +605,64 @@ void LevelCreationSystem::react_to_event(KeyEvent& signal)
 
 void LevelRenderSystem::activate()
 {    
+    static float dhues[MAP_WIDTH][MAP_HEIGHT]{ 0.0f, };
+    static float dsats[MAP_WIDTH][MAP_HEIGHT]{ 0.0f, };
+    static float dvals[MAP_WIDTH][MAP_HEIGHT]{ 0.0f, };
+
     tick++;
 
     TCODRandom* rng = TCODRandom::getInstance();
     auto& level = AccessWorld_UseUnique<Level>::access_unique();
     const auto& colors = AccessWorld_UseUnique<Colors>::access_unique();
+    auto& player_fov = AccessWorld_UseUnique<PlayerFOV>::access_unique();
 
     const auto player_entity = AccessWorld_QueryAllEntitiesWith<Player>::query().front();
     const auto& world_pos = AccessWorld_QueryComponent<WorldPosition>::get_component(player_entity);
     const auto& sight = AccessWorld_QueryComponent<Sight>::get_component(player_entity);
 
     const auto rad = (float)sight.radius;
-    const auto radius = (float)sight.radius * 2.0f;
+    const auto rad2 = (float)sight.radius * 2;
+
+    player_fov.fields.clear();
 
     for (int i = 0; i < MAP_WIDTH; i++)
     {
         for (int j = 0; j < MAP_HEIGHT; j++)
         {
             const auto scr = ScreenPosition{ i, j };
-            if (level.map->isInFov(i, j))
-            {
-                const auto ij = WorldPosition{ i, j };
-                const auto dist = world_pos.distance(ij);
+            const auto ij = WorldPosition{ i, j };
+            const auto dist = world_pos.distance(ij);
 
-                float dist_factor = 1.0f;
-                if (dist >= sight.radius * 0.9f)
-                {
-                    dist_factor = 0.25f;
-                }
-                else if (dist >= sight.radius * 0.75f)
-                {
-                    dist_factor = 0.45f;
-                }
-                else if (dist >= sight.radius * 0.5f)
-                {
-                    dist_factor = 0.6f;
-                }
+            if (level.map->isInFov(i, j) && dist < rad)
+            {
+                player_fov.fields.insert(ij);
+
+                dhues[i][j] = level.hues[i][j];
+                dsats[i][j] = level.sats[i][j];
+                
+                dvals[i][j] = level.vals[i][j] * (1.0f - (dist / rad));
 
                 if (level.dig[i][j] == ' ')
                 {
-                    level.memory[i][j] = level.dig[i][j];
-                    AccessConsole::fg(scr, HSL(level.hues[i][j], level.sats[i][j], dist_factor * level.vals[i][j]));
+                    AccessConsole::fg(scr, HSL(dhues[i][j], dsats[i][j], dvals[i][j]));
                     AccessConsole::ch(scr, "#");
                     level.memory[i][j] = '#';
                 }
                 else if (level.dig[i][j] == '*')
                 {
                     auto time_factor = std::sin((i + j) * colors.shimmer_stripe_width + tick * colors.shimmer_stripe_speed);
-                    bg(scr, HSL(level.hues[i][j] + time_factor * colors.shimmer_stripe_strength, 1.0f,
-                        rng->getFloat(0.95f, 1.0f) * (rad - world_pos.distance(ij)) / radius));
-                    AccessConsole::fg(scr, HSL(255.0f, 0.3f, 2 * (radius - world_pos.distance(ij)) / rad));
+                    auto h = dhues[i][j] + time_factor * colors.shimmer_stripe_strength;
+                    auto s = 1.0f;
+                    auto v = rng->getFloat(0.95f, 1.0f) * (rad - world_pos.distance(ij)) / rad2;
+
+                    bg(scr, HSL(h, s, v));
+                    AccessConsole::fg(scr, HSL(255.0f, 0.3f, 2 * (rad2 - world_pos.distance(ij)) / rad));
                     level.memory[i][j] = '.';
                     ch(scr, ".");
                 }
                 else
                 {
-                    AccessConsole::fg(scr, HSL(level.hues[i][j], colors.visible_sat, dist_factor));
+                    AccessConsole::fg(scr, HSL(dhues[i][j], dsats[i][j], dvals[i][j]));
                     std::string s(1, level.dig[i][j]);
                     level.memory[i][j] = level.dig[i][j];
                     AccessConsole::ch(scr, s);
@@ -668,10 +670,23 @@ void LevelRenderSystem::activate()
             }
             else
             {
-                AccessConsole::fg(scr, HSL(colors.memory_hue, colors.memory_sat, colors.memory_lit));
+                if (dsats[i][j] > 0.0f)
+                {
+                    dsats[i][j] -= 0.001f;
+                    if (dsats[i][j] < 0.0f)
+                        dsats[i][j] = 0.0f;
+                }
 
-                std::string s(1, level.dig[i][j]);
-                s[0] = level.memory[i][j];
+                if (dvals[i][j] > 0.001f)
+                {
+                    dvals[i][j] -= 0.001f;
+                    if (dvals[i][j] < 0.001f)
+                        dvals[i][j] = 0.001f;
+                }
+
+                AccessConsole::fg(scr, HSL(dhues[i][j], dsats[i][j], dvals[i][j]));
+
+                std::string s(1, level.memory[i][j]);
                 AccessConsole::ch(scr, s);
             }
         }

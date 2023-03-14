@@ -26,10 +26,3 @@ struct Debug_ReloadConfigSystem
 {
 	void react_to_event(KeyEvent& signal) override;	
 };
-
-struct Debug_HintSystem
-	: public RuntimeSystem
-	, public AccessConsole
-{
-	void activate() override;
-};

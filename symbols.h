@@ -81,6 +81,7 @@ struct BlockMovementThroughPeopleSystem
 struct SymbolRenderSystem
     : public RuntimeSystem
     , public AccessWorld_UseUnique<Level>
+    , public AccessWorld_UseUnique<PlayerFOV>
     , public AccessWorld_QueryAllEntitiesWith<Symbol, WorldPosition>
     , public AccessWorld_QueryAllEntitiesWith<Person, Symbol, WorldPosition>
     , public AccessWorld_QueryAllEntitiesWith<Player, Symbol, WorldPosition>
@@ -93,6 +94,7 @@ struct SymbolRenderSystem
     void activate() override
     {
         auto& level = AccessWorld_UseUnique<Level>::access_unique();
+        auto& fov = AccessWorld_UseUnique<PlayerFOV>::access_unique();
         
         for (auto&& [entity, symbol, world_pos] : AccessWorld_QueryAllEntitiesWith<Symbol, WorldPosition>::query().each())
         {
@@ -103,7 +105,7 @@ struct SymbolRenderSystem
 
             std::string s(1, level.regions[wp.x][wp.y]);
             
-            if (level.map->isInFov(wp.x, wp.y))
+            if (fov.fields.count(world_pos) > 0)
             {
                 if (AccessWorld_QueryComponent<Colored>::has_component(entity))
                 {
@@ -130,7 +132,7 @@ struct SymbolRenderSystem
 
             std::string s(1, level.regions[wp.x][wp.y]);
 
-            if (level.map->isInFov(wp.x, wp.y))
+            if (fov.fields.count(world_pos) > 0)
             {
                 if (AccessWorld_QueryComponent<Colored>::has_component(entity))
                 {

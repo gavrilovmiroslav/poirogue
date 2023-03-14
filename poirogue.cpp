@@ -49,8 +49,7 @@ int main(int argc, char* argv[])
     engine.add_runtime_system<SymbolRenderSystem>();
     engine.add_runtime_system<PlayerChoiceSystem>();
     engine.add_runtime_system<AIChoiceSystem>();
-    engine.add_runtime_system<Debug_TurnOrderSystem>();    
-    engine.add_runtime_system<Debug_HintSystem>();
+    engine.add_runtime_system<Debug_TurnOrderSystem>();        
     engine.add_runtime_system<HUDSystem>();
     engine.add_runtime_system<MouseCursorSystem>();
 

@@ -17,12 +17,12 @@ void PlotCrafting::execute_crafting()
     int murder_index = rng->getInt(0, size - 1);
     social_interactions[murder_index](people_mapping, event_id++, entt::null, true);
 
-    for (int i = 0; i < social_interactions.size(); i++)
+    for (int i = 0; i < size; i++)
         if (i != murder_index)
             social_interactions[i](people_mapping, event_id++, entt::null, false);
 
     auto people = people_mapping.get_all_people_shuffled();
-    for (int i = 0; i < social_interactions.size(); i++)
+    for (int i = 0; i < size; i++)
     {
         social_interactions[i](people_mapping, event_id++, people.back(), false);
         people.pop_back();

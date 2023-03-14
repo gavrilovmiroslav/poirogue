@@ -1,19 +1,23 @@
 #include "hud.h"
 #include "config.h"
 
+#include <sstream>
+
 #define HUD_INVENTORY_BOX_WIDTH 7
 #define HUD_INVENTORY_BOX_HEIGHT 5
 #define HUD_INVENTORY_BOX_MID_AT 3
 
 void HUDSystem::item_box(int index, Entity item, int x, int y)
 {
-	auto color = HSL(0.0f, 0.0f, 1.0f);
+	auto color = (item == entt::null) ? HSL(0.0f, 0.0f, 1.0f) : HSL(30.0f, 0.5f, 1.0f);
+	
 	auto h = color.h;
 	auto s = color.s;
 	auto l = color.l;
 
 	auto mp = AccessMousePosition::get_mouse_position();
 	bool selected = (mp.x >= x && mp.x < x + HUD_INVENTORY_BOX_WIDTH && mp.y >= SCREEN_HEIGHT - HUD_INVENTORY_BOX_HEIGHT - y - 1 && mp.y <= SCREEN_HEIGHT - y);
+	if (item == entt::null) selected = false;
 	
 	str({ x, SCREEN_HEIGHT - 6 - y - (int)selected }, "+-----+", color);
 	str({ x, SCREEN_HEIGHT - 5 - y - (int)selected }, "|     |", color * 0.8f);
@@ -46,6 +50,15 @@ void HUDSystem::item_box(int index, Entity item, int x, int y)
 
 void HUDSystem::activate()
 {
+	const auto& calendar = AccessWorld_UseUnique<Calendar>::access_unique();
+
+	std::stringstream s("");
+	s << "DAY " << calendar.day << ", "
+		<< std::setw(2) << std::setfill('0') << calendar.hour << ":"
+		<< std::setw(2) << std::setfill('0') << calendar.minute;
+
+	str({ 1, SCREEN_HEIGHT - 2 }, s.str(), "#ffffff"_rgb);
+
 	int full_width = INVENTORY_SIZE * HUD_INVENTORY_BOX_WIDTH + (INVENTORY_SIZE - 1);
 	int center = (SCREEN_WIDTH - full_width) / 2;
 
