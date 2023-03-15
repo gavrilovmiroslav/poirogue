@@ -75,9 +75,21 @@ void PoirogueEngine::poll_events()
                 });
             break;
 
-        case SDL_MOUSEBUTTONUP:
+        case SDL_MOUSEBUTTONDOWN:
             entt_events.trigger<MouseEvent>(MouseEvent
                 {
+                    true,
+                    (MouseButton)event.button.button,
+                    event.button.x,
+                    event.button.y
+                });
+            break;
+
+        case SDL_MOUSEBUTTONUP:
+            mouse_buttons[event.button.button] = true;
+            entt_events.trigger<MouseEvent>(MouseEvent
+                {
+                    false,
                     (MouseButton)event.button.button,
                     event.button.x,
                     event.button.y
@@ -100,6 +112,11 @@ void PoirogueEngine::end_frame()
 {
     tcod_context.present(tcod_console);
     entt_events.trigger<Tick>(Tick{});
+
+    for (int i = 0; i < 4; i++)
+    {
+        mouse_buttons[i] = false;
+    }
 }
 
 void PoirogueEngine::run_systems()
@@ -127,8 +144,18 @@ YAML::Node AccessYAML::load(const char* name)
     return YAML::LoadFile(name);
 }
 
-void AccessConsole::str(const ScreenPosition& pt, std::string_view text, RGB fg)
+void AccessConsole::box(const ScreenPosition& pt, int w, int h, RGB fg, RGB bg, char c)
 {
+    tcod::draw_rect(PoirogueEngine::Instance->tcod_console, { pt.x, pt.y, w, h }, c, fg, bg);
+}
+
+void AccessConsole::frame(const ScreenPosition& pt, int w, int h, RGB fg, RGB bg)
+{
+    tcod::draw_frame(PoirogueEngine::Instance->tcod_console, { pt.x, pt.y, w, h }, { '/', '-', '\\', '|', ' ', '|', '\\', '-', '/' }, fg, bg);
+}
+
+void AccessConsole::str(const ScreenPosition& pt, std::string_view text, RGB fg)
+{   
     tcod::print(PoirogueEngine::Instance->tcod_console, (std::array<int, 2>&)pt, text, fg, std::nullopt);
 }
 

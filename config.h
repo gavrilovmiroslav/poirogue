@@ -24,7 +24,7 @@
 
 // attributes
 #define ATTRIBUTE_SPEED_NORM 100
-#define ATTRIBUTE_SIGHT_NORM 20
+#define ATTRIBUTE_SIGHT_NORM 30
  
 // inventory
 #define INVENTORY_SIZE 6

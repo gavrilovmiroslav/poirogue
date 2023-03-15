@@ -19,8 +19,8 @@ struct TimeSystem
 	, public AccessEvents_Emit<DayPassedSignal>
 	, public AccessEvents_Listen<ActionCompleteSignal>
 	, public AccessEvents_Listen<CalendarUpdateSignal>
-{	
-	bool pick_next_in_turn_order = false;	
+{
+	bool pick_next_in_turn_order = false;
 
 	void activate() override;
 	void react_to_event(ActionCompleteSignal& signal) override;

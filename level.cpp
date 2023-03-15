@@ -604,7 +604,7 @@ void LevelCreationSystem::react_to_event(KeyEvent& signal)
 }
 
 void LevelRenderSystem::activate()
-{    
+{
     static float dhues[MAP_WIDTH][MAP_HEIGHT]{ 0.0f, };
     static float dsats[MAP_WIDTH][MAP_HEIGHT]{ 0.0f, };
     static float dvals[MAP_WIDTH][MAP_HEIGHT]{ 0.0f, };
@@ -640,7 +640,7 @@ void LevelRenderSystem::activate()
                 dhues[i][j] = level.hues[i][j];
                 dsats[i][j] = level.sats[i][j];
                 
-                dvals[i][j] = level.vals[i][j] * (1.0f - (dist / rad));
+                dvals[i][j] = std::max(level.vals[i][j] * (1.0f - (dist / rad)), 0.33f);
 
                 if (level.dig[i][j] == ' ')
                 {
@@ -672,16 +672,16 @@ void LevelRenderSystem::activate()
             {
                 if (dsats[i][j] > 0.0f)
                 {
-                    dsats[i][j] -= 0.001f;
+                    dsats[i][j] -= 0.00001f;
                     if (dsats[i][j] < 0.0f)
                         dsats[i][j] = 0.0f;
                 }
 
-                if (dvals[i][j] > 0.001f)
+                if (dvals[i][j] > 0.00001f)
                 {
-                    dvals[i][j] -= 0.001f;
-                    if (dvals[i][j] < 0.001f)
-                        dvals[i][j] = 0.001f;
+                    dvals[i][j] -= 0.00001f;
+                    if (dvals[i][j] < 0.33f)
+                        dvals[i][j] = 0.33f;
                 }
 
                 AccessConsole::fg(scr, HSL(dhues[i][j], dsats[i][j], dvals[i][j]));

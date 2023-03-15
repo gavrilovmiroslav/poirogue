@@ -73,13 +73,15 @@ protected:
 	static PoirogueEngine* Instance;
 
 private:
+    bool mouse_buttons[4] { false, false, false, false };
+
     ScreenPosition mouse_position;
 	bool engine_running;
     
     friend struct AccessConsole;
 
     friend struct AccessWorld_CheckValidity;
-    friend struct AccessMousePosition;
+    friend struct AccessResource_Mouse;
 
     template<typename T>
     friend struct AccessWorld_UseUnique;
@@ -128,6 +130,8 @@ struct AccessYAML : public Access
 
 struct AccessConsole : public Access
 {
+    void box(const ScreenPosition& pt, int w, int h, RGB fg, RGB bg, char c = ' ');
+    void frame(const ScreenPosition& pt, int w, int h, RGB fg, RGB bg);
     void str(const ScreenPosition& pt, std::string_view text, RGB fg);
     void ch(const ScreenPosition& pt, std::string_view text);
     void bg(const ScreenPosition& pt, RGB color);
@@ -142,8 +146,23 @@ struct AccessWorld_CheckValidity : public Access
     }
 };
 
-struct AccessMousePosition : public Access
+struct AccessResource_Mouse : public Access
 {
+    const bool left_button() const
+    {
+        return PoirogueEngine::Instance->mouse_buttons[1];
+    }
+
+    const bool mid_button() const
+    {
+        return PoirogueEngine::Instance->mouse_buttons[2];
+    }
+
+    const bool right_button() const
+    {
+        return PoirogueEngine::Instance->mouse_buttons[3];
+    }
+
     const ScreenPosition& get_mouse_position() const
     {
         return PoirogueEngine::Instance->mouse_position;

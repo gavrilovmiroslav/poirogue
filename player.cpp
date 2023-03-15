@@ -5,6 +5,11 @@
 #include "level.h"
 #include "engine.h"
 
+void PlayerCreationSystem::activate()
+{
+    AccessWorld_UseUnique<GameContext>::access_unique() = GameContext::Game;
+}
+
 void PlayerCreationSystem::react_to_event(LevelCreationEvent& signal)
 {
     if (last_player_entity != entt::null)
@@ -80,6 +85,9 @@ void PlayerChoiceSystem::issue_command(IssueCommandSignal issue)
 void PlayerChoiceSystem::react_to_event(KeyEvent& key)
 {
     if (!player_turn)
+        return;
+
+    if (AccessWorld_UseUnique<GameContext>::access_unique() != GameContext::Game)
         return;
 
     const auto player = AccessWorld_QueryAllEntitiesWith<Player>::query().front();

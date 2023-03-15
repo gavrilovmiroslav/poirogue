@@ -122,6 +122,7 @@ struct KeyEvent final
 
 struct MouseEvent final
 {
+    bool down;
     MouseButton button;
     int x;
     int y;
@@ -147,6 +148,14 @@ enum class Sex {
     Male,
     Female,
     MONALE,
+};
+
+enum class GameContext {
+    Intro,
+    Game,
+    Menu,
+    Info,
+    COUNT
 };
 
 enum class PlaceKind {

@@ -5,14 +5,14 @@
 
 struct MouseCursorSystem
     : public RuntimeSystem
-    , public AccessMousePosition
+    , public AccessResource_Mouse
     , public AccessConsole
 {
     void activate() override
     {
         static float dsat = 0.0f;
 
-        auto& mp = AccessMousePosition::get_mouse_position();
+        auto& mp = AccessResource_Mouse::get_mouse_position();
 
         float hue = 200.0f;
         float sat = 0.0f;
